@@ -1,0 +1,60 @@
+﻿&ACCESS RVP
+&REL 9
+DEF test()
+
+
+   decl axis joint_pos_tgt
+   decl int elements_read   
+   bas(#initmov, 0)  ; Basic initializasion of axes
+   $VEL_AXIS[1] = 1
+   $VEL_AXIS[2] = 1
+   $VEL_AXIS[3] = 1
+   $VEL_AXIS[4] = 1
+   $VEL_AXIS[5] = 1
+   $VEL_AXIS[6] = 1
+   eki_hw_iface_init()
+   
+   joint_pos_tgt = $axis_act_meas
+   ptp joint_pos_tgt
+
+   $advance = 5
+   loop      
+      WAIT FOR $FLAG[2] 
+      elements_read = eki_hw_iface_get(joint_pos_tgt)  ; Get new command from buffer if present      
+      $FLAG[2] = FALSE      
+      ptp joint_pos_tgt c_ptp                          ; PTP to most recent commanded position      
+   endloop
+
+end
+
+def eki_hw_iface_init()
+   decl eki_status eki_ret
+      
+   wait sec 0.012          ; Wait for next interpolation cycle
+
+   ; Create and open EKI interface
+   eki_ret = eki_init("EkiHwInterface")
+   eki_ret = eki_open("EkiHwInterface")
+end
+
+deffct int eki_hw_iface_get(joint_pos_cmd :out)
+   decl eki_status eki_ret
+   decl axis joint_pos_cmd
+
+   if not $flag[1] then
+      return 0
+   endif
+
+   eki_ret = eki_checkbuffer("EkiHwInterface", "RobotCommand/Pos/@A1")
+   if eki_ret.buff <= 0 then
+     return 0
+   endif
+
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A1", joint_pos_cmd.a1)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A2", joint_pos_cmd.a2)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A3", joint_pos_cmd.a3)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A4", joint_pos_cmd.a4)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A5", joint_pos_cmd.a5)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A6", joint_pos_cmd.a6)
+   return 1
+endfct

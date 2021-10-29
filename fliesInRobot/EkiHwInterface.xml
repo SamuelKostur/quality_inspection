@@ -1,0 +1,24 @@
+<ETHERNETKRL>
+	<CONFIGURATION>
+		<EXTERNAL>
+			<IP>192.168.1.2</IP>
+            <PORT>54603</PORT>
+		</EXTERNAL>
+		<INTERNAL>
+			<PROTOCOL>TCP</PROTOCOL>
+			<ALIVE Set_Flag="1" />
+		</INTERNAL>
+	</CONFIGURATION>
+
+	<RECEIVE>
+      <XML>
+         <!-- Joint position command -->
+         <ELEMENT Tag="RobotCommand/Pos/@A1" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Pos/@A2" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Pos/@A3" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Pos/@A4" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Pos/@A5" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Pos/@A6" Type="REAL" Set_Flag="2"/>
+      </XML>
+   </RECEIVE>
+</ETHERNETKRL>

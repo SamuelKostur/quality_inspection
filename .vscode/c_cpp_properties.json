@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "browse": {
+        "databaseFilename": "",
+        "limitSymbolsToIncludedHeaders": true
+      },
+      "includePath": [
+        "/home/frixys/ardupilot_ws/devel/include/**",
+        "/opt/ros/melodic/include/**",
+        "/home/frixys/ardupilot_ws/src/lrs_mavros_example/include/**",
+        "/home/frixys/ardupilot_ws/src/quality_inspection/include/**",
+        "/usr/include/**"
+      ],
+      "name": "ROS"
+    }
+  ],
+  "version": 4
+}

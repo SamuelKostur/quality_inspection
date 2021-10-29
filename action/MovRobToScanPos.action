@@ -1,0 +1,23 @@
+# goal
+float32 A1
+float32 A2
+float32 A3
+float32 A4
+float32 A5
+float32 A6
+---
+# result
+float32 x
+float32 y
+float32 z
+float32 A
+float32 B
+float32 C
+---
+# feedback
+float32 x
+float32 y
+float32 z
+float32 A
+float32 B
+float32 C
