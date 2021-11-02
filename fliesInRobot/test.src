@@ -1,10 +1,9 @@
 ﻿&ACCESS RVP
 &REL 9
 DEF test()
-
-
    decl axis joint_pos_tgt
-   decl int elements_read   
+   decl int elements_read  
+
    bas(#initmov, 0)  ; Basic initializasion of axes
    $VEL_AXIS[1] = 1
    $VEL_AXIS[2] = 1
@@ -23,6 +22,7 @@ DEF test()
       elements_read = eki_hw_iface_get(joint_pos_tgt)  ; Get new command from buffer if present      
       $FLAG[2] = FALSE      
       ptp joint_pos_tgt c_ptp                          ; PTP to most recent commanded position      
+      eki_hw_iface_send()                              ; Send measured robot pose to PC
    endloop
 
 end
@@ -58,3 +58,23 @@ deffct int eki_hw_iface_get(joint_pos_cmd :out)
    eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A6", joint_pos_cmd.a6)
    return 1
 endfct
+
+def eki_hw_iface_send()
+   decl eki_status eki_ret
+
+   if $flag[1] then  ; If connection alive
+      ; Load state values into xml structure
+      ; Measured cartesian robot pose (Robot TCP in relation to the base coord sys)
+      eki_ret = eki_setreal("EkiHwInterface", "RobotState/Position/@X", $POS_ACT_MES.X)
+      eki_ret = eki_setreal("EkiHwInterface", "RobotState/Position/@Y", $POS_ACT_MES.Y)
+      eki_ret = eki_setreal("EkiHwInterface", "RobotState/Position/@Z", $POS_ACT_MES.Z)
+      eki_ret = eki_setreal("EkiHwInterface", "RobotState/Orientation/@A", $POS_ACT_MES.A)
+      eki_ret = eki_setreal("EkiHwInterface", "RobotState/Orientation/@B", $POS_ACT_MES.B)
+      eki_ret = eki_setreal("EkiHwInterface", "RobotState/Orientation/@C", $POS_ACT_MES.C)
+
+      ; Send xml structure
+      if $flag[1] then  ; Make sure connection hasn't died while updating xml structure
+         eki_ret = eki_send("EkiHwInterface", "RobotState")
+      endif
+   endif
+end

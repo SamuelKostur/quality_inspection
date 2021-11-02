@@ -10,7 +10,7 @@
     "files.associations": {
         "typeindex": "cpp",
         "typeinfo": "cpp",
-        "functional": "cpp"
-    },
-    "C_Cpp.errorSquiggles": "Disabled"
+        "functional": "cpp",
+        "ostream": "cpp"
+    }
 }

@@ -21,4 +21,16 @@
          <ELEMENT Tag="RobotCommand/Pos/@A6" Type="REAL" Set_Flag="2"/>
       </XML>
    </RECEIVE>
+
+   <SEND>
+      <XML>
+         <!-- $POS_ACT_MES, Measured cartesian robot pose (Robot TCP in relation to the base coord sys) -->
+         <ELEMENT Tag="RobotState/Position/@X"/>
+         <ELEMENT Tag="RobotState/Position/@Y"/>
+         <ELEMENT Tag="RobotState/Position/@Z"/>
+         <ELEMENT Tag="RobotState/Orientation/@A"/>
+         <ELEMENT Tag="RobotState/Orientation/@B"/>
+         <ELEMENT Tag="RobotState/Orientation/@C"/>
+      </XML>
+   </SEND>
 </ETHERNETKRL>

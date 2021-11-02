@@ -5,16 +5,13 @@
 #include <stdlib.h> 
 #include <netinet/in.h> 
 #include <arpa/inet.h>
-#include <string.h> 
 #include <unistd.h>
+#include <tinyxml.h>
 #define PORT 54603 
    
-int main(int argc, char const *argv[]) 
-{ 
-    struct sockaddr_in address; 
+int main(int argc, char const *argv[]){ 
     int sock = 0, valread; 
     struct sockaddr_in serv_addr; 
-    char *hello = "Hello from client"; 
     char buffer[1024] = {0}; 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) 
     { 
@@ -39,11 +36,17 @@ int main(int argc, char const *argv[])
         printf("Connection Failed"); 
         return -1; 
     } 
-    // send(sock , hello , strlen(hello) , 0 ); 
-    // printf("Hello message sent"); 
+
+    TiXmlDocument xml_in;
+    double positions[6];
     while(1){
-        valread = read( sock , buffer, 1024); 
+        valread = read( sock , buffer, 1024);
+        xml_in.Parse(buffer);
         printf("%s \n",buffer ); 
+        xml_in.FirstChildElement("RobotCommand") -> FirstChildElement("Pos") -> QueryDoubleAttribute("A2",&positions[1]);
+        printf("%lf \n", positions[1]);
+        memset(buffer, 0, sizeof(buffer));
+        xml_in.Clear();
     }
     return 0; 
 } 
