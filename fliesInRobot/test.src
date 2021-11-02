@@ -2,6 +2,7 @@
 &REL 9
 DEF test()
    decl axis joint_pos_tgt
+   decl frame robot_pose_command
    decl int elements_read  
 
    bas(#initmov, 0)  ; Basic initializasion of axes
@@ -19,9 +20,9 @@ DEF test()
    $advance = 5
    loop      
       WAIT FOR $FLAG[2] 
-      elements_read = eki_hw_iface_get(joint_pos_tgt)  ; Get new command from buffer if present      
+      elements_read = eki_hw_iface_get(robot_pose_command)  ; Get new command from buffer if present      
       $FLAG[2] = FALSE      
-      ptp joint_pos_tgt c_ptp                          ; PTP to most recent commanded position      
+      LIN robot_pose_command VEL=0.3m/s                         ; LIN to most recent commanded position      
       eki_hw_iface_send()                              ; Send measured robot pose to PC
    endloop
 
@@ -37,25 +38,25 @@ def eki_hw_iface_init()
    eki_ret = eki_open("EkiHwInterface")
 end
 
-deffct int eki_hw_iface_get(joint_pos_cmd :out)
+deffct int eki_hw_iface_get(robot_pose_command :out)
    decl eki_status eki_ret
-   decl axis joint_pos_cmd
+   decl frame robot_pose_command
 
    if not $flag[1] then
       return 0
    endif
 
-   eki_ret = eki_checkbuffer("EkiHwInterface", "RobotCommand/Pos/@A1")
+   eki_ret = eki_checkbuffer("EkiHwInterface", "RobotCommand/Position/@X")
    if eki_ret.buff <= 0 then
      return 0
    endif
 
-   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A1", joint_pos_cmd.a1)
-   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A2", joint_pos_cmd.a2)
-   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A3", joint_pos_cmd.a3)
-   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A4", joint_pos_cmd.a4)
-   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A5", joint_pos_cmd.a5)
-   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Pos/@A6", joint_pos_cmd.a6)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Position/@X", robot_pose_command.X)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Position/@Y", robot_pose_command.Y)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Position/@Z", robot_pose_command.Z)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Orientation/@A", robot_pose_command.A)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Orientation/@B", robot_pose_command.B)
+   eki_ret = eki_getreal("EkiHwInterface", "RobotCommand/Orientation/@C", robot_pose_command.C)
    return 1
 endfct
 

@@ -29,21 +29,27 @@
         as.start();   
       }
 
-      int sendRobotComand(double joint_position_command [6]){
-        int desSentStrLen = 132;
-        int n_dof_ = 6;
+      int sendRobotCommand(double robot_pose_command [6]){
+        int desSentStrLen = 163;
 
         TiXmlDocument xml_out;
         TiXmlElement* robot_command = new TiXmlElement("RobotCommand");
-        TiXmlElement* pos = new TiXmlElement("Pos");
+        TiXmlElement* position = new TiXmlElement("Position");
+        TiXmlElement* orientation = new TiXmlElement("Orientation");
         TiXmlText* empty_text = new TiXmlText("");
-        robot_command->LinkEndChild(pos);
-        pos->LinkEndChild(empty_text);   // force <Pos></Pos> format (vs <Pos />)
-        char axis_name[] = "A1";
-        for (int i = 0; i < n_dof_; ++i){
-          pos->SetAttribute(axis_name, std::to_string(joint_position_command[i]).c_str());
-          axis_name[1]++;
-        }
+        TiXmlText* empty_text2 = new TiXmlText("");
+
+        robot_command->LinkEndChild(position);
+        robot_command->LinkEndChild(orientation);
+        position->LinkEndChild(empty_text);   // force <Position></Position> format (vs <Position />)
+        orientation->LinkEndChild(empty_text2);
+
+        position->SetAttribute("X", std::to_string(robot_pose_command[0]).c_str());
+        position->SetAttribute("Y", std::to_string(robot_pose_command[1]).c_str());
+        position->SetAttribute("Z", std::to_string(robot_pose_command[2]).c_str());
+        orientation->SetAttribute("A", std::to_string(robot_pose_command[3]).c_str());
+        orientation->SetAttribute("B", std::to_string(robot_pose_command[4]).c_str());
+        orientation->SetAttribute("C", std::to_string(robot_pose_command[5]).c_str());
         xml_out.LinkEndChild(robot_command);
 
         
@@ -55,9 +61,8 @@
         double sentStrLen = send(sockfd_client ,xml_printer.CStr(), xml_printer.Size(), 0);
         printf("Send vratil = %lf \n", sentStrLen);
 
-        if(desSentStrLen == sentStrLen){
+        if(desSentStrLen == sentStrLen)
           return 0;
-        }
         else
           return -1;
       }
@@ -80,21 +85,21 @@
       }
 
       void executeCB(const quality_inspection::MovRobToScanPosGoalConstPtr& goal){
-        double joint_position_command[6];  
-        joint_position_command[0] = (double) goal->A1;
-        joint_position_command[1] = (double) goal->A2;
-        joint_position_command[2] = (double) goal->A3;
-        joint_position_command[3] = (double) goal->A4;
-        joint_position_command[4] = (double) goal->A5;
-        joint_position_command[5] = (double) goal->A6;    
-        if(sendRobotComand(joint_position_command) != 0){
+        double robot_pose_command[6];  
+        robot_pose_command[0] = (double) goal->x;
+        robot_pose_command[1] = (double) goal->y;
+        robot_pose_command[2] = (double) goal->z;
+        robot_pose_command[3] = (double) goal->A;
+        robot_pose_command[4] = (double) goal->B;
+        robot_pose_command[5] = (double) goal->C;    
+        if(sendRobotCommand(robot_pose_command) != 0){
           as.setAborted();
         }
         quality_inspection::MovRobToScanPosResult robotPos;
 
         readRobotPose(&robotPos); //for real robot
         // sleep(3); //for testing on PC
-        // robotPos.x = goal->A2; //for testing on PC
+        // robotPos.x = goal->x; //for testing on PC
 
         // Do lots of awesome groundbreaking robot stuff here
         as.setSucceeded(robotPos);

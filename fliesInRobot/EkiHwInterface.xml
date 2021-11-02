@@ -13,12 +13,12 @@
 	<RECEIVE>
       <XML>
          <!-- Joint position command -->
-         <ELEMENT Tag="RobotCommand/Pos/@A1" Type="REAL" />
-         <ELEMENT Tag="RobotCommand/Pos/@A2" Type="REAL" />
-         <ELEMENT Tag="RobotCommand/Pos/@A3" Type="REAL" />
-         <ELEMENT Tag="RobotCommand/Pos/@A4" Type="REAL" />
-         <ELEMENT Tag="RobotCommand/Pos/@A5" Type="REAL" />
-         <ELEMENT Tag="RobotCommand/Pos/@A6" Type="REAL" Set_Flag="2"/>
+         <ELEMENT Tag="RobotCommand/Position/@X" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Position/@Y" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Position/@Z" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Orientation/@A" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Orientation/@B" Type="REAL" />
+         <ELEMENT Tag="RobotCommand/Orientation/@C" Type="REAL" Set_Flag="2"/>
       </XML>
    </RECEIVE>
 

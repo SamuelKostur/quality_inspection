@@ -8,7 +8,7 @@
   class MainControl{
     public:
       actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> client;
-      //vector of robot poses (in this case desired angle on idnividual axis) {A1, A2, A3, A4, A5, A6}
+      //vector of robot poses {x, y, z, A, B, C}
       vector<vector<double>> robotPoses = {{-34.37, -51.82, 97.55, 28.77, 56.92, 90.25},
                                            {-36.40, -70.34, 92.41, 28.77, 56.92, 90.25}};
 
@@ -36,12 +36,12 @@
     
       quality_inspection::MovRobToScanPosGoal setGoal(vector<double> goalArray){
         quality_inspection::MovRobToScanPosGoal goal;
-        goal.A1 = goalArray[0];
-        goal.A2 = goalArray[1];
-        goal.A3 = goalArray[2];
-        goal.A4 = goalArray[3];
-        goal.A5 = goalArray[4];
-        goal.A6 = goalArray[5];
+        goal.x = goalArray[0];
+        goal.y = goalArray[1];
+        goal.z = goalArray[2];
+        goal.A = goalArray[3];
+        goal.B = goalArray[4];
+        goal.C = goalArray[5];
         return goal;
       }
   };
