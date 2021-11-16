@@ -30,7 +30,7 @@
       }
 
       int sendRobotCommand(double robot_pose_command [6]){
-        int desSentStrLen = 128;
+        int desSentStrLen = 133;
 
         TiXmlDocument xml_out;
         TiXmlElement* robot_command = new TiXmlElement("RobotCommand");
@@ -47,7 +47,6 @@
         pose->SetAttribute("B", std::to_string(robot_pose_command[4]).c_str());
         pose->SetAttribute("C", std::to_string(robot_pose_command[5]).c_str());
         xml_out.LinkEndChild(robot_command);
-
         
         TiXmlPrinter xml_printer;
         xml_printer.SetStreamPrinting();  // no linebreaks
@@ -74,7 +73,7 @@
         xml_in.FirstChildElement("RobotState") -> FirstChildElement("Position") -> QueryDoubleAttribute("Z", &robotPos->z);
         xml_in.FirstChildElement("RobotState") -> FirstChildElement("Orientation") -> QueryDoubleAttribute("A", &robotPos->A);
         xml_in.FirstChildElement("RobotState") -> FirstChildElement("Orientation") -> QueryDoubleAttribute("B", &robotPos->B);
-        xml_in.FirstChildElement("RobotState") -> FirstChildElement("Orientation") -> QueryDoubleAttribute("B", &robotPos->C);
+        xml_in.FirstChildElement("RobotState") -> FirstChildElement("Orientation") -> QueryDoubleAttribute("C", &robotPos->C);
         memset(readBuffer, 0, sizeof(readBuffer));
         xml_in.Clear();
         return 0;

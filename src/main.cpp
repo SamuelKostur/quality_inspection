@@ -9,8 +9,8 @@
     public:
       actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> client;
       //vector of robot poses {x, y, z, A, B, C}
-      vector<vector<double>> robotPoses = {{-34.37, -51.82, 97.55, 28.77, 56.92, 90.25},
-                                           {-36.40, -70.34, 92.41, 28.77, 56.92, 90.25}};
+      vector<vector<double>> robotPoses = {{562.62, 258.68, 426.09, -53.88, -21.64, -158.85},
+                                           {502.37, 325.28, 614.12, -41.67, -26.52, -171.87}};
 
       MainControl(): client("movRobToScanPos", true){
         cout << "Waiting for the availability of the action server handling communication with robot." << endl;
@@ -25,7 +25,13 @@
           client.waitForResult(ros::Duration(15.0)); //maximum time to move robot to desired position
           if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
               finalRobPos = client.getResult();
-              cout << "robot is in position " << "x: " << finalRobPos->x << endl;
+              cout << "robot is in position " << "x: " << finalRobPos->x  << ", "
+                                              << "y: " << finalRobPos->y  << ", "
+                                              << "z: " << finalRobPos->z  << ", "
+                                              << "A: " << finalRobPos->A  << ", "
+                                              << "B: " << finalRobPos->B  << ", "
+                                              << "C: " << finalRobPos->C  << ", "
+                                              << endl;
           }
           else{
               cout <<"error during robot positioning" << endl;
