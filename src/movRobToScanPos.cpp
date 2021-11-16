@@ -30,26 +30,22 @@
       }
 
       int sendRobotCommand(double robot_pose_command [6]){
-        int desSentStrLen = 163;
+        int desSentStrLen = 128;
 
         TiXmlDocument xml_out;
         TiXmlElement* robot_command = new TiXmlElement("RobotCommand");
-        TiXmlElement* position = new TiXmlElement("Position");
-        TiXmlElement* orientation = new TiXmlElement("Orientation");
+        TiXmlElement* pose = new TiXmlElement("Pose");
         TiXmlText* empty_text = new TiXmlText("");
-        TiXmlText* empty_text2 = new TiXmlText("");
 
-        robot_command->LinkEndChild(position);
-        robot_command->LinkEndChild(orientation);
-        position->LinkEndChild(empty_text);   // force <Position></Position> format (vs <Position />)
-        orientation->LinkEndChild(empty_text2);
+        robot_command->LinkEndChild(pose);
+        pose->LinkEndChild(empty_text);   // force <Position></Position> format (vs <Position />)
 
-        position->SetAttribute("X", std::to_string(robot_pose_command[0]).c_str());
-        position->SetAttribute("Y", std::to_string(robot_pose_command[1]).c_str());
-        position->SetAttribute("Z", std::to_string(robot_pose_command[2]).c_str());
-        orientation->SetAttribute("A", std::to_string(robot_pose_command[3]).c_str());
-        orientation->SetAttribute("B", std::to_string(robot_pose_command[4]).c_str());
-        orientation->SetAttribute("C", std::to_string(robot_pose_command[5]).c_str());
+        pose->SetAttribute("X", std::to_string(robot_pose_command[0]).c_str());
+        pose->SetAttribute("Y", std::to_string(robot_pose_command[1]).c_str());
+        pose->SetAttribute("Z", std::to_string(robot_pose_command[2]).c_str());
+        pose->SetAttribute("A", std::to_string(robot_pose_command[3]).c_str());
+        pose->SetAttribute("B", std::to_string(robot_pose_command[4]).c_str());
+        pose->SetAttribute("C", std::to_string(robot_pose_command[5]).c_str());
         xml_out.LinkEndChild(robot_command);
 
         

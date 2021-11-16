@@ -43,7 +43,7 @@ int main(int argc, char const *argv[]){
         valread = read( sock , buffer, 1024);
         xml_in.Parse(buffer);
         printf("%s \n",buffer ); 
-        xml_in.FirstChildElement("RobotCommand") -> FirstChildElement("Position") -> QueryDoubleAttribute("X",&positions[1]);
+        xml_in.FirstChildElement("RobotCommand") -> FirstChildElement("Pose") -> QueryDoubleAttribute("X",&positions[1]);
         printf("%lf \n", positions[1]);
         memset(buffer, 0, sizeof(buffer));
         xml_in.Clear();
