@@ -2,12 +2,18 @@
   #include <quality_inspection/MovRobToScanPosAction.h>
   #include <actionlib/client/simple_action_client.h>
   #include <stdlib.h>
+  #include <phoxi_camera/GetFrame.h>
   
   typedef actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> Client;
   using namespace std;
   class MainControl{
     public:
+      ros::NodeHandle n;
       actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> client;
+
+      ros::ServiceClient cameraClient;
+      phoxi_camera::GetFrame scan;
+
       //vector of robot poses {x, y, z, A, B, C}
       vector<vector<double>> robotPoses = {{562.62, 258.68, 426.09, -53.88, -21.64, -158.85},
                                            {502.37, 325.28, 614.12, -41.67, -26.52, -171.87}};
@@ -16,6 +22,9 @@
         cout << "Waiting for the availability of the action server handling communication with robot." << endl;
         client.waitForServer();
         cout << "connected to action server" << endl;
+        
+        cameraClient = n.serviceClient<phoxi_camera::GetFrame>("/phoxi_camera/get_frame");
+        scan.request.in = -1;
       }
 
       void executeMainCycle(){
@@ -37,6 +46,16 @@
               cout <<"error during robot positioning" << endl;
               return;
           }
+
+          if(cameraClient.call(scan)){
+            ROS_INFO("%d\n",(bool)scan.response.success);
+
+          }
+          else{
+            ROS_ERROR("Failed to call service getFrame");
+            return;
+          }
+
         }
       }
     
@@ -58,6 +77,5 @@
     MainControl mainControl;
     mainControl.executeMainCycle();
 
-    //printf("Current State: %s\n", client.getState().toString().c_str());
     return 0;
   }

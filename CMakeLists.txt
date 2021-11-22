@@ -14,6 +14,7 @@ find_package(catkin REQUIRED COMPONENTS
   std_msgs
   message_generation
   cmake_modules
+  phoxi_camera
 )
 
 ## System dependencies are found with CMake's conventions
@@ -140,6 +141,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(movRobToScanPos src/movRobToScanPos.cpp)
 add_executable(main src/main.cpp)
+add_executable(processScan src/processScan.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -150,12 +152,16 @@ add_executable(main src/main.cpp)
 ## same as for the library above
 add_dependencies(movRobToScanPos ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(main ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(processScan ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ## Specify libraries to link a library or executable target against
 target_link_libraries(movRobToScanPos
   ${catkin_LIBRARIES}
   ${TinyXML_LIBRARIES}
 )
 target_link_libraries(main
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(processScan
   ${catkin_LIBRARIES}
 )
 #############
