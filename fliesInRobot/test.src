@@ -6,14 +6,13 @@ DEF test()
    decl int elements_read  
 
    bas(#initmov, 0)  ; Basic initializasion of axes
-   $VEL_AXIS[1] = 25 ; percentage of the maximum axis velocity
-   $VEL_AXIS[2] = 25 ; percentage of the maximum axis velocity
-   $VEL_AXIS[3] = 25 ; percentage of the maximum axis velocity
-   $VEL_AXIS[4] = 5 ; percentage of the maximum axis velocity
-   $VEL_AXIS[5] = 5 ; percentage of the maximum axis velocity
-   $VEL_AXIS[6] = 5 ; percentage of the maximum axis velocity
-   $VEL.CP = 0.2 ; 0.2 m/s
-   $ACC.CP = 0.4 ; 0.4 m/s^2
+
+   $VEL_AXIS[1] = 3 ; percentage of the maximum axis velocity
+   $VEL_AXIS[2] = 3 ; percentage of the maximum axis velocity
+   $VEL_AXIS[3] = 3 ; percentage of the maximum axis velocity
+   $VEL_AXIS[4] = 3 ; percentage of the maximum axis velocity
+   $VEL_AXIS[5] = 3 ; percentage of the maximum axis velocity
+   $VEL_AXIS[6] = 3 ; percentage of the maximum axis velocity
    eki_hw_iface_init()
    
    robot_pose_command = $pos_act_mes
@@ -25,7 +24,7 @@ DEF test()
       WAIT FOR $FLAG[2] 
       elements_read = eki_hw_iface_get(robot_pose_command)  ; Get new command from buffer if present      
       $FLAG[2] = FALSE      
-      LIN robot_pose_command                        ; LIN to most recent commanded position      
+      PTP robot_pose_command                        ; PTP to most recent commanded position      
       wait sec 0.5                                   ;wait till robot oscilations deaden
       eki_hw_iface_send()                              ; Send measured robot pose to PC
    endloop
