@@ -43,7 +43,6 @@
       void executeMainCycle(){
         quality_inspection::MovRobToScanPosResultConstPtr finalRobPos;
         for(auto& pose: robotPoses){
-          getchar();
           client.sendGoal(setGoal(pose));
           client.waitForResult(ros::Duration(30.0)); //maximum time to move robot to desired position
           if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
@@ -69,7 +68,6 @@
             ROS_ERROR("Failed to call service getFrame");
             return;
           }
-
         }
       }
     
