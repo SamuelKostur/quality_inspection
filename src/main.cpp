@@ -9,8 +9,8 @@
     public:
       actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> client;
       //vector of robot poses {x, y, z, A, B, C}
-      vector<vector<double>> robotPoses = {{562.62, 258.68, 426.09, -53.88, -21.64, -158.85},
-                                           {502.37, 325.28, 614.12, -41.67, -26.52, -171.87}};
+      vector<vector<double>> robotPoses = {{493.54, 474.27, 408.72, -166.89, 33.72, 166.38},
+                                           {604.56, 318.81, 365.03, 149.99, 28.06, 164.57}};
 
       MainControl(): client("movRobToScanPos", true){
         cout << "Waiting for the availability of the action server handling communication with robot." << endl;
@@ -22,7 +22,7 @@
         quality_inspection::MovRobToScanPosResultConstPtr finalRobPos;
         for(auto& pose: robotPoses){
           client.sendGoal(setGoal(pose));
-          client.waitForResult(ros::Duration(15.0)); //maximum time to move robot to desired position
+          client.waitForResult(ros::Duration(30.0)); //maximum time to move robot to desired position
           if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
               finalRobPos = client.getResult();
               cout << "robot is in position " << "x: " << finalRobPos->x  << ", "
@@ -57,7 +57,5 @@
 
     MainControl mainControl;
     mainControl.executeMainCycle();
-
-    //printf("Current State: %s\n", client.getState().toString().c_str());
     return 0;
   }

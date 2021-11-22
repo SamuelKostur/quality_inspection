@@ -30,8 +30,6 @@
       }
 
       int sendRobotCommand(double robot_pose_command [6]){
-        int desSentStrLen = 133;
-
         TiXmlDocument xml_out;
         TiXmlElement* robot_command = new TiXmlElement("RobotCommand");
         TiXmlElement* pose = new TiXmlElement("Pose");
@@ -56,9 +54,10 @@
         double sentStrLen = send(sockfd_client ,xml_printer.CStr(), xml_printer.Size(), 0);
         printf("Send vratil = %lf \n", sentStrLen);
 
-        if(desSentStrLen == sentStrLen)
+        if(sentStrLen > 0)
           return 0;
         else
+          printf("Error while sending desired position \n");
           return -1;
       }
 
