@@ -9,7 +9,7 @@
   class MainControl{
     public:
       ros::NodeHandle n;
-      actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> client;
+      //actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> client;
 
       ros::ServiceClient cameraClient;
       phoxi_camera::GetFrame scan;
@@ -31,35 +31,40 @@
                                            {27.57, 358.33, 569.22, -44.55, 41.93, 145.90},
                                            {194.15, 393.29, 569.19, -87.52, 42.39, 131.79}};
 
-      MainControl(): client("movRobToScanPos", true){
-        cout << "Waiting for the availability of the action server handling communication with robot." << endl;
-        client.waitForServer();
-        cout << "connected to action server" << endl;
+      // MainControl(): client("movRobToScanPos", true){
+      //   cout << "Waiting for the availability of the action server handling communication with robot." << endl;
+      //   client.waitForServer();
+      //   cout << "connected to action server" << endl;
         
+      //   cameraClient = n.serviceClient<phoxi_camera::GetFrame>("/phoxi_camera/get_frame");
+      //   scan.request.in = -1;
+      // }
+
+       MainControl(){
         cameraClient = n.serviceClient<phoxi_camera::GetFrame>("/phoxi_camera/get_frame");
         scan.request.in = -1;
       }
 
       void executeMainCycle(){
-        quality_inspection::MovRobToScanPosResultConstPtr finalRobPos;
+        //quality_inspection::MovRobToScanPosResultConstPtr finalRobPos;
         for(auto& pose: robotPoses){
-          client.sendGoal(setGoal(pose));
-          client.waitForResult(ros::Duration(30.0)); //maximum time to move robot to desired position
-          if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
-              finalRobPos = client.getResult();
-              cout << "robot is in position " << "x: " << finalRobPos->x  << ", "
-                                              << "y: " << finalRobPos->y  << ", "
-                                              << "z: " << finalRobPos->z  << ", "
-                                              << "A: " << finalRobPos->A  << ", "
-                                              << "B: " << finalRobPos->B  << ", "
-                                              << "C: " << finalRobPos->C  << ", "
-                                              << endl;
-          }
-          else{
-              cout <<"error during robot positioning" << endl;
-              return;
-          }
-
+          getchar();
+          // client.sendGoal(setGoal(pose));
+          // client.waitForResult(ros::Duration(30.0)); //maximum time to move robot to desired position
+          // if (client.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
+          //     finalRobPos = client.getResult();
+          //     cout << "robot is in position " << "x: " << finalRobPos->x  << ", "
+          //                                     << "y: " << finalRobPos->y  << ", "
+          //                                     << "z: " << finalRobPos->z  << ", "
+          //                                     << "A: " << finalRobPos->A  << ", "
+          //                                     << "B: " << finalRobPos->B  << ", "
+          //                                     << "C: " << finalRobPos->C  << ", "
+          //                                     << endl;
+          // }
+          // else{
+          //     cout <<"error during robot positioning" << endl;
+          //     return;
+          // }
           if(cameraClient.call(scan)){
             ROS_INFO("%d\n",(bool)scan.response.success);
 
