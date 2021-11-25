@@ -15,8 +15,13 @@ class ProcessScan{
         MyPointCloud::Ptr completePointCloud  = MyPointCloud::Ptr (new MyPointCloud);
 
         //vector of robot poses {x, y, z, A, B, C}
-        vector<vector<double>> robotPoses = {{113.47, 473.59, 256.68, -62.08, 20.18, 179.67},
-                                             {418.90, 245.69, 662.63, -93.26, 60.94, 149.65}};
+        vector<vector<double>> robotPoses = {{780.80, 247.40, 204.88, 132.95, 3.4, 179.05},
+                                             {749.80, -19.13, 240.26, 132.82, 4.95, 177.37},
+                                             {203.01, -339.43, 219.94, 51.00, 4.86, -179.83},
+                                             {294.49, 126.36, 598.63, 79.11, 61.83, 97.29},
+                                             {345.37, 437.17, 598.85, 77.80, 62.26, 96.90},
+                                             {-58.01, 611.61, 222.38, -38.61, 8.83, -170.97},
+                                             {-85.37, 375.77, 212.30, -45.46, 6.59, -179.71}};
         
         int numRobPoses;
  
@@ -75,20 +80,27 @@ class ProcessScan{
         }
 
         void callback(const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud){
+            cout << "processing started..." << endl;
             static int currIdxRobPose = 0;
             MyPointCloud::Ptr pointCloud (new MyPointCloud);
             pcl::fromROSMsg(*originalPointCloud,*pointCloud);
+            cout << "saving original point cloud..." << endl;
             pcl::io::savePCDFileASCII ("pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
-            extractUnmeasuredPoints(pointCloud);           
+            cout << "extracting unmeasured points..." << endl;
+            extractUnmeasuredPoints(pointCloud);  
+            cout << "transforming point cloud from TCP to robot coord space..." << endl;   
             transformPointCloudFromTCPtoRobot(robotPoses[currIdxRobPose], pointCloud);
             completePointCloud->operator+=(*pointCloud);
+            cout << "saving transformed point cloud..." << endl;   
             pcl::io::savePCDFileASCII ("pointCloud" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
 
             currIdxRobPose++;
             if(currIdxRobPose == numRobPoses){
+                cout << "saving complete point cloud..." << endl; 
                 pcl::io::savePCDFileASCII ("completePointCloud.pcd", *completePointCloud);
             }
             currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
+            cout << "processing done..." << endl; 
         }
 };
 

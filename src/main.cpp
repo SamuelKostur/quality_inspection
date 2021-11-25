@@ -15,9 +15,15 @@
       ros::ServiceClient cameraClient;
       phoxi_camera::GetFrame scan;
 
-      //vector of robot poses {x, y, z, A, B, C}
-      vector<vector<double>> robotPoses = {{113.47, 473.59, 256.68, -62.08, 20.18, 179.67},
-                                           {418.90, 245.69, 662.63, -93.26, 60.94, 149.65}};
+      //vector of robot poses {x, y, z, A, B, C} 
+      //TODO home robot pose somewhere above the part, to avoid colision when moving from last to first pose
+      vector<vector<double>> robotPoses = {{780.80, 247.40, 204.88, 132.95, 3.4, 179.05},
+                                             {749.80, -19.13, 240.26, 132.82, 4.95, 177.37},
+                                             {203.01, -339.43, 219.94, 51.00, 4.86, -179.83},
+                                             {294.49, 126.36, 598.63, 79.11, 61.83, 97.29},
+                                             {345.37, 437.17, 598.85, 77.80, 62.26, 96.90},
+                                             {-58.01, 611.61, 222.38, -38.61, 8.83, -170.97},
+                                             {-85.37, 375.77, 212.30, -45.46, 6.59, -179.71}};
 
       MainControl(): client("movRobToScanPos", true){
         cout << "Waiting for the availability of the action server handling communication with robot." << endl;
