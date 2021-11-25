@@ -12,25 +12,17 @@ class ProcessScan{
         ros::NodeHandle n;
         ros::Subscriber pointCloudSub;
 
+        MyPointCloud::Ptr completePointCloud  = MyPointCloud::Ptr (new MyPointCloud);
+
         //vector of robot poses {x, y, z, A, B, C}
-        vector<vector<double>> robotPoses = {{493.54, 474.27, 408.72, -166.89, 33.72, 166.38},
-                                             {604.56, 318.81, 365.03, 149.99, 28.06, 164.57},
-                                             {469.91, -128.03, 408.67, 89.15, 23.61, 157.28},
-                                             {344.85, -169.52, 378.81, 72.53, 23.56, 163.9},
-                                             
-                                             {272.59, -110.18, 512.98, 56.28, 34.47, 157.81},
-                                             {300.44, 24.16, 568.90, 94.24, 39.68, 98.02},
-                                             {325.92, 260.59, 613.00, 95.72, 61.34, 96.42},
-                                             {329.21, 495.81, 572.70, 140.49, 68.32, 130.36},
-                                             {323.73, 624.93, 494.75, -144.16, 61.44, 174.62},
- 
-                                             {15.38, 535.33, 484.33, -73.99, 41.96, 161.67},
-                                             {-133.16, 437.75, 336.15, -45.23, 30.92, 176.66},
-                                             {27.57, 358.33, 569.22, -44.55, 41.93, 145.90},
-                                             {194.15, 393.29, 569.19, -87.52, 42.39, 131.79}};
+        vector<vector<double>> robotPoses = {{113.47, 473.59, 256.68, -62.08, 20.18, 179.67},
+                                             {418.90, 245.69, 662.63, -93.26, 60.94, 149.65}};
+        
+        int numRobPoses;
  
         ProcessScan(){
-            pointCloudSub = n.subscribe<sensor_msgs::PointCloud2> ("/phoxi_camera/pointcloud", 1, &ProcessScan::callback, this);
+            pointCloudSub = n.subscribe<sensor_msgs::PointCloud2> ("/phoxi_camera/pointcloud", 1, &ProcessScan::callback, this);   
+            numRobPoses = robotPoses.size();
         }
 
         void extractUnmeasuredPoints(MyPointCloud::Ptr pointCloud){
@@ -66,28 +58,37 @@ class ProcessScan{
 
         void transformPointCloudFromTCPtoRobot(vector<double> robotPose, MyPointCloud::Ptr pointCloud){
             robotPoseToMetersAndRadians(robotPose);
-
-            Eigen::Affine3f transMatrix;
-            transMatrix = (Eigen::Affine3f)Eigen::Translation3f(robotPose[0], robotPose[1], robotPose[2]);
-
-            Eigen::Matrix3f rotMatrix;
-            rotMatrix = Eigen::AngleAxisf(robotPose[3], Eigen::Vector3f::UnitX())
-            * Eigen::AngleAxisf(robotPose[4], Eigen::Vector3f::UnitY())
-            * Eigen::AngleAxisf(robotPose[5], Eigen::Vector3f::UnitZ());
-            transMatrix.rotate(rotMatrix);
             
+            Eigen::Matrix3f R;
+            R = Eigen::AngleAxisf(robotPose[3], Eigen::Vector3f::UnitZ())
+            * Eigen::AngleAxisf(robotPose[4], Eigen::Vector3f::UnitY())
+            * Eigen::AngleAxisf(robotPose[5], Eigen::Vector3f::UnitX());
+            
+            Eigen::Vector3f T;
+            T = Eigen::Vector3f(robotPose[0], robotPose[1], robotPose[2]);
+ 
+            Eigen::Matrix4f transMatrix;
+            transMatrix.setIdentity();   // Set to Identity to make bottom row of Matrix 0,0,0,1
+            transMatrix.block<3,3>(0,0) = R;
+            transMatrix.block<3,1>(0,3) = T;
             pcl::transformPointCloud(*pointCloud, *pointCloud, transMatrix);            
         }
 
         void callback(const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud){
-            static int idx = 0;
-            MyPointCloud::Ptr pointCloud (new MyPointCloud);  
+            static int currIdxRobPose = 0;
+            MyPointCloud::Ptr pointCloud (new MyPointCloud);
             pcl::fromROSMsg(*originalPointCloud,*pointCloud);
-            extractUnmeasuredPoints(pointCloud);            
-            transformPointCloudFromTCPtoRobot(robotPoses[idx], pointCloud);
-            pcl::io::savePCDFileASCII ("pointCloud" + std::to_string(idx) + ".pcd", *pointCloud);
-            idx++;
-            printf("tu \n");
+            pcl::io::savePCDFileASCII ("pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
+            extractUnmeasuredPoints(pointCloud);           
+            transformPointCloudFromTCPtoRobot(robotPoses[currIdxRobPose], pointCloud);
+            completePointCloud->operator+=(*pointCloud);
+            pcl::io::savePCDFileASCII ("pointCloud" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
+
+            currIdxRobPose++;
+            if(currIdxRobPose == numRobPoses){
+                pcl::io::savePCDFileASCII ("completePointCloud.pcd", *completePointCloud);
+            }
+            currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
         }
 };
 
