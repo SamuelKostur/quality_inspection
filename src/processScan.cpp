@@ -14,8 +14,8 @@ class ProcessScan{
 
         MyPointCloud::Ptr completePointCloud  = MyPointCloud::Ptr (new MyPointCloud);
 
-        //vector of robot poses {x, y, z, A, B, C}
-        vector<vector<double>> robotPoses = {{780.80, 247.40, 204.88, 132.95, 3.4, 179.05},
+        //vector of robot scan poses {x, y, z, A, B, C} {mm, mm, mm, deg, deg, deg}
+        vector<vector<double>> robotScanPoses = {{780.80, 247.40, 204.88, 132.95, 3.4, 179.05},
                                              {749.80, -19.13, 240.26, 132.82, 4.95, 177.37},
                                              {203.01, -339.43, 219.94, 51.00, 4.86, -179.83},
                                              {294.49, 126.36, 598.63, 79.11, 61.83, 97.29},
@@ -27,7 +27,9 @@ class ProcessScan{
  
         ProcessScan(){
             pointCloudSub = n.subscribe<sensor_msgs::PointCloud2> ("/phoxi_camera/pointcloud", 1, &ProcessScan::callback, this);   
-            numRobPoses = robotPoses.size();
+            numRobPoses = robotScanPoses.size();
+
+            ros::spin();
         }
 
         void extractUnmeasuredPoints(MyPointCloud::Ptr pointCloud){
@@ -46,19 +48,17 @@ class ProcessScan{
             extraction.filter(*pointCloud);
         }
 
-        void robotPoseToMetersAndRadians(vector<double> &robotPoses){
+        void robotPoseToMetersAndRadians(vector<double> &robotScanPoses){
             // KUKA robots use the so called XYZ-ABC format. 
             // XYZ is the position in millimeters. 
             // ABC are angles in degrees, with A rotating around z axis, B rotating around y axis and C rotating around x axis. 
             // The rotation convention is z-y′-x′′ (i.e. x-y-z) and computed by rz(A)ry(B)rx(C).
-
-            robotPoses[0] = robotPoses[0] / 1000.0;
-            robotPoses[1] = robotPoses[1] / 1000.0;
-            robotPoses[2] = robotPoses[2] / 1000.0;
-
-            robotPoses[3] = robotPoses[3] / 180.0 * M_PI;
-            robotPoses[4] = robotPoses[4] / 180.0 * M_PI;
-            robotPoses[5] = robotPoses[5] / 180.0 * M_PI;
+            robotScanPoses[0] = robotScanPoses[0] / 1000.0;
+            robotScanPoses[1] = robotScanPoses[1] / 1000.0;
+            robotScanPoses[2] = robotScanPoses[2] / 1000.0;
+            robotScanPoses[3] = robotScanPoses[3] / 180.0 * M_PI;
+            robotScanPoses[4] = robotScanPoses[4] / 180.0 * M_PI;
+            robotScanPoses[5] = robotScanPoses[5] / 180.0 * M_PI;
         }
 
         void transformPointCloudFromTCPtoRobot(vector<double> robotPose, MyPointCloud::Ptr pointCloud){
@@ -89,7 +89,7 @@ class ProcessScan{
             cout << "extracting unmeasured points..." << endl;
             extractUnmeasuredPoints(pointCloud);  
             cout << "transforming point cloud from TCP to robot coord space..." << endl;   
-            transformPointCloudFromTCPtoRobot(robotPoses[currIdxRobPose], pointCloud);
+            transformPointCloudFromTCPtoRobot(robotScanPoses[currIdxRobPose], pointCloud);
             completePointCloud->operator+=(*pointCloud);
             cout << "saving transformed point cloud..." << endl;   
             pcl::io::savePCDFileASCII ("pointCloud" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
@@ -98,6 +98,7 @@ class ProcessScan{
             if(currIdxRobPose == numRobPoses){
                 cout << "saving complete point cloud..." << endl; 
                 pcl::io::savePCDFileASCII ("completePointCloud.pcd", *completePointCloud);
+                completePointCloud->clear();
             }
             currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
             cout << "processing done..." << endl; 
@@ -107,6 +108,5 @@ class ProcessScan{
 int main(int argc, char** argv){
     ros::init(argc, argv, "processScanNode");
     ProcessScan processScan;
-    ros::spin();
     return 0;
 }

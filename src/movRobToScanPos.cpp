@@ -26,7 +26,9 @@
           std::cout << "Connection to robot unsuccessful" << std::endl;
           return;
         }
-        as.start();   
+        as.start();
+
+        ros::spin();
       }
 
       int sendRobotCommand(double robot_pose_command [6]){
@@ -56,9 +58,10 @@
 
         if(sentStrLen > 0)
           return 0;
-        else
+        else{
           printf("Error while sending desired position \n");
           return -1;
+        }
       }
 
       int readRobotPose(quality_inspection::MovRobToScanPosResult *robotPos){
@@ -151,9 +154,6 @@
   
   int main(int argc, char** argv){
     ros::init(argc, argv, "movRobToScanPosServer");
-
     RobotPoseSender robotPoseSender;
-     
-    ros::spin();
     return 0;
   }
