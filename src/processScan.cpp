@@ -6,7 +6,7 @@
 #include <message_filters/time_synchronizer.h>
 #include <message_filters/subscriber.h>
 
-typedef pcl::PointNormal MyPoint;
+typedef pcl::PointXYZINormal MyPoint;
 typedef pcl::PointCloud<MyPoint> MyPointCloud;
 
 #define FRAME_WIDTH 2064
@@ -37,9 +37,9 @@ class ProcessScan{
             // textureSub = n.subscribe<sensor_msgs::Image> ("/texture", 1, &ProcessScan::textureCB, this);
 
             message_filters::Subscriber<sensor_msgs::PointCloud2> pointCloudSub(n, "/phoxi_camera/pointcloud", 1);
-            message_filters::Subscriber<sensor_msgs::Image> textureSub(n, "/texture", 1);
+            message_filters::Subscriber<sensor_msgs::Image> textureSub(n, "phoxi_camera/texture", 1);
             message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::Image> sync(pointCloudSub, textureSub, 10);
-            sync.registerCallback(boost::bind(&ProcessScan::combCB, _1, _2));
+            sync.registerCallback(boost::bind(&ProcessScan::combCB, this, _1, _2));
 
             numRobPoses = robotScanPoses.size();
 
@@ -104,22 +104,20 @@ class ProcessScan{
             return img;
         }
 
-        pcl::PointCloud<pcl::PointXYZINormal>::Ptr addTextureToPointCloud(MyPointCloud::Ptr pointCloud, std::vector<std::vector<uint8_t>>& img){
+        pcl::PointCloud<pcl::PointXYZINormal>::Ptr addTextureToPointCloud(pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud, std::vector<std::vector<uint8_t>>& img){
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr pointCloudTexture (new pcl::PointCloud<pcl::PointXYZINormal>);
             pcl::copyPointCloud(*pointCloud, *pointCloudTexture);
+            int temp = 0;
             for (int row = 0; row < img.size(); row++){
                 for (int col = 0; col < img[0].size(); col++){
-                    pointCloudTexture->at(row, col).intensity = img[row][col];
+                    pointCloudTexture->at(col, row).intensity = img[row][col];
                 }
             }
             return pointCloudTexture;
         }
 
-        void pointCloudCB(const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud){
-            cout << "processing started..." << endl;
-            static int currIdxRobPose = 0;
-            MyPointCloud::Ptr pointCloud (new MyPointCloud);
-            pcl::fromROSMsg(*originalPointCloud,*pointCloud);
+        void processPointCloud(MyPointCloud::Ptr pointCloud){
+        	static int currIdxRobPose = 0;
             cout << "saving original point cloud..." << endl;
             pcl::io::savePCDFileASCII ("pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
             cout << "extracting unmeasured points..." << endl;
@@ -140,17 +138,17 @@ class ProcessScan{
             cout << "processing done..." << endl; 
         }
 
-        void processPointCloud(){
-            
-        }
-
         void combCB (const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud, const sensor_msgs::Image::ConstPtr& originalTexture){
-            MyPointCloud::Ptr pointCloud (new MyPointCloud);
-            pcl::fromROSMsg(*originalPointCloud,*pointCloud);            
+            cout << "processing started..." << endl;
+            pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud (new pcl::PointCloud<pcl::PointNormal>);
+            cout << "parsing from rosmsg..." << endl;
+            pcl::fromROSMsg(*originalPointCloud,*pointCloud);  
+            cout << "creating texture img..." << endl;          
             std::vector<std::vector<uint8_t>> img = createTextureImage(originalTexture);
+            cout << "combining point cloud and texture ..." << endl;
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr pointCloudNormI= addTextureToPointCloud(pointCloud, img);
 
-
+            processPointCloud(pointCloudNormI);
         }
 };
 
