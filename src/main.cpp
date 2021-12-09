@@ -5,11 +5,15 @@
   #include <phoxi_camera/GetFrame.h>
   #include <phoxi_camera/SetTransformationMatrix.h>
   
+  #define CONNECT_ROBOT 1
   using namespace std;
   class MainControl{
     public:
       ros::NodeHandle n;
-      actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> robotClient;
+
+      #if CONNECT_ROBOT
+        actionlib::SimpleActionClient<quality_inspection::MovRobToScanPosAction> robotClient;
+      #endif
 
       ros::ServiceClient cameraClient;
       phoxi_camera::GetFrame scan;
@@ -25,16 +29,25 @@
       
       vector<double> robotHomePose = {218.80, 393.40, 704.72, 113.37, 46.55, 55.06};
 
-      MainControl(): robotClient("movRobToScanPos", true){
-        cout << "Waiting for the availability of the action server handling communication with robot." << endl;
-        robotClient.waitForServer();
-        cout << "connected to action server" << endl;
-        
-        cameraClient = n.serviceClient<phoxi_camera::GetFrame>("/phoxi_camera/get_frame");
-        scan.request.in = -1;
+      #if CONNECT_ROBOT
+        MainControl(): robotClient("movRobToScanPos", true){        
+          cout << "Waiting for the availability of the action server handling communication with robot." << endl;
+          robotClient.waitForServer();
+          cout << "connected to action server" << endl;
+          
+          cameraClient = n.serviceClient<phoxi_camera::GetFrame>("/phoxi_camera/get_frame");
+          scan.request.in = -1;
 
-        mainEndlessLoop();
-      }
+          mainEndlessLoop();
+        }
+      #else     
+        MainControl(){       
+          cameraClient = n.serviceClient<phoxi_camera::GetFrame>("/phoxi_camera/get_frame");
+          scan.request.in = -1;
+
+          mainEndlessLoop();
+        }
+      #endif
 
       quality_inspection::MovRobToScanPosGoal setGoal(vector<double> goalArray){
         quality_inspection::MovRobToScanPosGoal goal;
@@ -48,24 +61,28 @@
       }
 
       int movRobToScanPos(vector<double> pose){
-        quality_inspection::MovRobToScanPosResultConstPtr finalRobPos;
-        robotClient.sendGoal(setGoal(pose));
-        robotClient.waitForResult(ros::Duration(30.0)); //maximum time to move robot to desired position
-        if (robotClient.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
-          finalRobPos = robotClient.getResult();
-          cout << "robot is in position " << "x: " << finalRobPos->x  << ", "
-                                          << "y: " << finalRobPos->y  << ", "
-                                          << "z: " << finalRobPos->z  << ", "
-                                          << "A: " << finalRobPos->A  << ", "
-                                          << "B: " << finalRobPos->B  << ", "
-                                          << "C: " << finalRobPos->C  << ", "
-                                          << endl;
+        #if CONNECT_ROBOT
+          quality_inspection::MovRobToScanPosResultConstPtr finalRobPos;
+          robotClient.sendGoal(setGoal(pose));
+          robotClient.waitForResult(ros::Duration(30.0)); //maximum time to move robot to desired position
+          if (robotClient.getState() == actionlib::SimpleClientGoalState::SUCCEEDED){
+            finalRobPos = robotClient.getResult();
+            cout << "robot is in position " << "x: " << finalRobPos->x  << ", "
+                                            << "y: " << finalRobPos->y  << ", "
+                                            << "z: " << finalRobPos->z  << ", "
+                                            << "A: " << finalRobPos->A  << ", "
+                                            << "B: " << finalRobPos->B  << ", "
+                                            << "C: " << finalRobPos->C  << ", "
+                                            << endl;
+            return 0;
+          }
+          else{
+            cout <<"error during robot positioning" << endl;
+            return -1;
+          }
+        #else
           return 0;
-        }
-        else{
-          cout <<"error during robot positioning" << endl;
-          return -1;
-        }
+        #endif
       }
 
       int triggerScan(){

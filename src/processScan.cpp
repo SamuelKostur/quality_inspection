@@ -39,26 +39,21 @@ class ProcessScan{
         int numRobPoses;
  
         ProcessScan(){
-            // pointCloudSub = n.subscribe<sensor_msgs::PointCloud2> ("/phoxi_camera/pointcloud", 1, &ProcessScan::pointCloudCB, this);
-            // textureSub = n.subscribe<sensor_msgs::Image> ("/texture", 1, &ProcessScan::textureCB, this);
+            numRobPoses = robotScanPoses.size(); //this has to be first
+
+            fillFutPromVec(); //call here to ensure that futures are ready before data callback is processed
+
+            cout << "startin endlessLoop" << endl;
+            std::thread infinitThread (&ProcessScan::endlessLoop, this);
+            cout << "endles loop started" << endl;
 
             message_filters::Subscriber<sensor_msgs::PointCloud2> pointCloudSub(n, "/phoxi_camera/pointcloud", 1);
             message_filters::Subscriber<sensor_msgs::Image> textureSub(n, "phoxi_camera/texture", 1);
             message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::Image> sync(pointCloudSub, textureSub, 10);
             sync.registerCallback(boost::bind(&ProcessScan::combCB, this, _1, _2));
 
-            numRobPoses = robotScanPoses.size();
-            cout << "creating futures and pomises" << endl;
-            for(int i  = 0; i < numRobPoses; i++){
-        		std::promise<MyPointCloud::Ptr> promise;
-                futureVec.push_back(promise.get_future());
-        		promiseVec.push_back(std::move(promise));
-        	}
-            cout << "startin endlessLoop" << endl;
-            std::thread infinitThread (&ProcessScan::endlessLoop, this);
-            cout << "endles loop started" << endl;
             ros::spin();
-            infinitThread.join();
+            infinitThread.join(); // or use std:;thread::detach
         }
 
         void extractUnmeasuredPoints(MyPointCloud::Ptr pointCloud){
@@ -131,29 +126,7 @@ class ProcessScan{
             return pointCloudTexture;
         }
 
-        void processPointCloud(MyPointCloud::Ptr pointCloud){
-        	static int currIdxRobPose = 0;
-            cout << "saving original point cloud..." << endl;
-            pcl::io::savePCDFileASCII ("pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
-            cout << "extracting unmeasured points..." << endl;
-            extractUnmeasuredPoints(pointCloud);  
-            cout << "transforming point cloud from TCP to robot coord space..." << endl;   
-            transformPointCloudFromTCPtoRobot(robotScanPoses[currIdxRobPose], pointCloud);
-            completePointCloud->operator+=(*pointCloud);
-            cout << "saving transformed point cloud..." << endl;   
-            pcl::io::savePCDFileASCII ("pointCloud" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
-
-            currIdxRobPose++;
-            if(currIdxRobPose == numRobPoses){
-                cout << "saving complete point cloud..." << endl; 
-                pcl::io::savePCDFileASCII ("completePointCloud.pcd", *completePointCloud);
-                completePointCloud->clear();
-            }
-            currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
-            cout << "processing done..." << endl; 
-        }
-
-        void processPointCloud2(std::future<MyPointCloud::Ptr> future, int currIdxRobPose){
+        void processPointCloud(std::future<MyPointCloud::Ptr> future, int currIdxRobPose){
             cout << "processing point cloud" << currIdxRobPose << ".." << endl;
         	MyPointCloud::Ptr pointCloud = future.get();
             cout << "saving original point cloud..." << endl;
@@ -187,8 +160,19 @@ class ProcessScan{
             //processPointCloud(pointCloudNormI);
         }
 
+        void fillFutPromVec(){
+            futureVec.reserve(numRobPoses);
+            promiseVec.reserve(numRobPoses);
+            for(int i  = 0; i < numRobPoses; i++){
+        		std::promise<MyPointCloud::Ptr> promise;
+                futureVec.emplace(futureVec.begin() + i, promise.get_future());
+        		promiseVec.emplace(promiseVec.begin() + i, std::move(promise));
+        	}
+        }
+
         void endlessLoop(){
-        	std::vector<std::thread> threadVec;
+        	std::vector<future<void>> threadVec;
+            threadVec.reserve(8);
         	while(1){
         		//tu vytvorit 8 threadov na spracovanie point cloudu ktory je ulozeny v premennej ci uz globalnej alebo vo future,
         		//a nasledne pred pridavanim do celkoveho point cloudu este pridat mutex aby viacere thready naraz nepristupovali k tej istej premennej
@@ -196,14 +180,18 @@ class ProcessScan{
                 cout<< "creating threads" << endl;
         		for (int i = 0; i < numRobPoses; i++){
                     cout << i << endl;
-        			threadVec.emplace_back([&](){processPointCloud2(std::move(futureVec[i]), i);});     
-                    sleep(1);   			
-        		}
-                cout<< "waiting for threads" << endl;
-        		for (auto& t : threadVec){
-        			t.join();     			
+                    auto t = std::async(std::launch::async, &ProcessScan::processPointCloud, this, std::move(futureVec[i]), i);
+        			threadVec.emplace(threadVec.begin() + i, std::move(t));     	
         		}
                 
+                cout<< "waiting for threads" << endl;
+        		for (auto& t : threadVec){
+                    if(t.wait_for(std::chrono::seconds(600)) != future_status::ready){
+                        cout << "timeout over, problem procesing data" << endl;
+                    }			
+        		}
+                fillFutPromVec();
+
                 cout << "saving complete point cloud..." << endl; 
                 pcl::io::savePCDFileASCII ("completePointCloud.pcd", *completePointCloud);
                 completePointCloud->clear();
