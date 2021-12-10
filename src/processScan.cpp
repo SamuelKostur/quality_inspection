@@ -8,12 +8,15 @@
 #include <future>
 #include <thread>
 #include <mutex>
+#include <cv_bridge/cv_bridge.h>
+#include <opencv2/imgcodecs.hpp>
+#include <ros/package.h>
+#include <boost/filesystem.hpp>
 
 typedef pcl::PointXYZINormal MyPoint;
 typedef pcl::PointCloud<MyPoint> MyPointCloud;
 
-#define FRAME_WIDTH 2064
-#define FRAME_HEIGHT 1544
+#define SAVE_PARTIAL_DATA 1
 
 using namespace std;
 class ProcessScan{
@@ -23,7 +26,8 @@ class ProcessScan{
         ros::Subscriber textureSub;    
         std::vector<std::promise<pcl::PointCloud<pcl::PointXYZINormal>::Ptr>> promiseVec;
     	std::vector<std::future<pcl::PointCloud<pcl::PointXYZINormal>::Ptr>> futureVec;
-    	std::mutex mtx;    
+    	std::mutex mtx;
+        std::string dataPath;
 
         MyPointCloud::Ptr completePointCloud  = MyPointCloud::Ptr (new MyPointCloud);
 
@@ -39,13 +43,13 @@ class ProcessScan{
         int numRobPoses;
  
         ProcessScan(){
+            createDataPath();
+            cout << dataPath << endl;
             numRobPoses = robotScanPoses.size(); //this has to be first
 
             fillFutPromVec(); //call here to ensure that futures are ready before data callback is processed
 
-            cout << "startin endlessLoop" << endl;
-            std::thread infinitThread (&ProcessScan::endlessLoop, this);
-            cout << "endles loop started" << endl;
+            std::thread endlessThread (&ProcessScan::endlessLoop, this);
 
             message_filters::Subscriber<sensor_msgs::PointCloud2> pointCloudSub(n, "/phoxi_camera/pointcloud", 1);
             message_filters::Subscriber<sensor_msgs::Image> textureSub(n, "phoxi_camera/texture", 1);
@@ -53,7 +57,15 @@ class ProcessScan{
             sync.registerCallback(boost::bind(&ProcessScan::combCB, this, _1, _2));
 
             ros::spin();
-            infinitThread.join(); // or use std:;thread::detach
+            endlessThread.join(); // or use std:;thread::detach
+        }
+
+        void createDataPath(){
+            dataPath = ros::package::getPath("quality_inspection"); 
+            dataPath = dataPath.substr(0, dataPath.find_last_of("/\\"));    
+            dataPath = dataPath.substr(0, dataPath.find_last_of("/\\"));       
+            dataPath = dataPath + "/InspectionFiles/";
+            boost::filesystem::create_directories(dataPath);
         }
 
         void extractUnmeasuredPoints(MyPointCloud::Ptr pointCloud){
@@ -103,61 +115,61 @@ class ProcessScan{
             pcl::transformPointCloud(*pointCloud, *pointCloud, transMatrix);            
         }
 
-        std::vector<std::vector<uint8_t>> createTextureImage(const sensor_msgs::Image::ConstPtr& originalTexture){
-            //texture comes after point cloud
-            std::vector<std::vector<uint8_t>> img(FRAME_HEIGHT, vector<uint8_t> (FRAME_WIDTH, 0));
-            for(int row = 0; row < FRAME_HEIGHT; row++){
-                for(int col = 0; col < FRAME_WIDTH; col++){
-                    img[row][col] = originalTexture->data[(FRAME_WIDTH * row) + col];
-                }
-            }
-            return img;
+        cv::Mat createTextureImage(const sensor_msgs::Image::ConstPtr& originalTexture){
+            cv::Mat img (originalTexture->height, originalTexture->width, CV_32FC1,
+                                  (void*)(&originalTexture->data[0]));
+            // before normalization and conversion is intensity scale probably 0-4095 
+            // i measured min 4 and max 4094
+            // but it probably somehow corresponds to LED power which is 0-4095
+            cv::normalize(img, img, 0, 255, CV_MINMAX);
+            img.convertTo(img, CV_8UC1);
+            return img.clone();
         }
 
-        pcl::PointCloud<pcl::PointXYZINormal>::Ptr addTextureToPointCloud(pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud, std::vector<std::vector<uint8_t>>& img){
+        pcl::PointCloud<pcl::PointXYZINormal>::Ptr addTextureToPointCloud(pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud, cv::Mat& img){
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr pointCloudTexture (new pcl::PointCloud<pcl::PointXYZINormal>);
             pcl::copyPointCloud(*pointCloud, *pointCloudTexture);
-            int temp = 0;
-            for (int row = 0; row < img.size(); row++){
-                for (int col = 0; col < img[0].size(); col++){
-                    pointCloudTexture->at(col, row).intensity = img[row][col];
+
+            for(int rowIdx = 0; rowIdx < img.rows; rowIdx++){
+                const uint8_t* imgRow = img.ptr<uint8_t>(rowIdx);
+                for(int colIdx = 0; colIdx < img.cols; colIdx++){
+                    pointCloudTexture->at(colIdx, rowIdx).intensity = imgRow[colIdx];
                 }
             }
             return pointCloudTexture;
         }
 
-        void processPointCloud(std::future<MyPointCloud::Ptr> future, int currIdxRobPose){
-            cout << "processing point cloud" << currIdxRobPose << ".." << endl;
-        	MyPointCloud::Ptr pointCloud = future.get();
-            cout << "saving original point cloud..." << endl;
-            pcl::io::savePCDFileASCII ("pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
-            cout << "extracting unmeasured points..." << endl;
-            extractUnmeasuredPoints(pointCloud);  //prepisat typ co ide do funkcie alebo spravit template
-            cout << "transforming point cloud from TCP to robot coord space..." << endl;   
-            transformPointCloudFromTCPtoRobot(robotScanPoses[currIdxRobPose], pointCloud);
-            cout << "saving transformed point cloud..." << endl;   
-            pcl::io::savePCDFileASCII ("pointCloud" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
-
-            mtx.lock();
-            completePointCloud->operator+=(*pointCloud);
-            mtx.unlock();
-        }
-
         void combCB (const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud, const sensor_msgs::Image::ConstPtr& originalTexture){
             static int currIdxRobPose = 0;
-            cout << "processing started..." << endl;
+            cout << "combining partial point cloud with intensity " << currIdxRobPose << "..." << endl;
             pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud (new pcl::PointCloud<pcl::PointNormal>);
-            cout << "parsing from rosmsg..." << endl;
-            pcl::fromROSMsg(*originalPointCloud,*pointCloud);  
-            cout << "creating texture img..." << endl;          
-            std::vector<std::vector<uint8_t>> img = createTextureImage(originalTexture);
-            cout << "combining point cloud and texture ..." << endl;
+            pcl::fromROSMsg(*originalPointCloud,*pointCloud);        
+            cv::Mat img = createTextureImage(originalTexture);
+            #if SAVE_PARTIAL_DATA
+                cv::imwrite(dataPath + "img" + std::to_string(currIdxRobPose) + ".bmp", img);
+            #endif
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr pointCloudNormI= addTextureToPointCloud(pointCloud, img);
 
             promiseVec[currIdxRobPose].set_value(pointCloudNormI);
             currIdxRobPose++;
             currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
-            //processPointCloud(pointCloudNormI);
+        }
+
+        void processPointCloud(std::future<MyPointCloud::Ptr> future, int currIdxRobPose){
+            cout << "waiting for partial point cloud" << currIdxRobPose << "..." << endl;
+        	MyPointCloud::Ptr pointCloud = future.get();
+            cout << "processing partial point cloud" << currIdxRobPose << "..." << endl;
+            #if SAVE_PARTIAL_DATA
+                pcl::io::savePCDFileASCII (dataPath + "pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
+            #endif
+            extractUnmeasuredPoints(pointCloud);  //prepisat typ co ide do funkcie alebo spravit template
+            transformPointCloudFromTCPtoRobot(robotScanPoses[currIdxRobPose], pointCloud);
+            #if SAVE_PARTIAL_DATA
+                pcl::io::savePCDFileASCII (dataPath + "pointCloud" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
+            #endif
+            mtx.lock();
+            completePointCloud->operator+=(*pointCloud);
+            mtx.unlock();
         }
 
         void fillFutPromVec(){
@@ -177,25 +189,22 @@ class ProcessScan{
         		//tu vytvorit 8 threadov na spracovanie point cloudu ktory je ulozeny v premennej ci uz globalnej alebo vo future,
         		//a nasledne pred pridavanim do celkoveho point cloudu este pridat mutex aby viacere thready naraz nepristupovali k tej istej premennej
         		//processing
-                cout<< "creating threads" << endl;
         		for (int i = 0; i < numRobPoses; i++){
-                    cout << i << endl;
                     auto t = std::async(std::launch::async, &ProcessScan::processPointCloud, this, std::move(futureVec[i]), i);
         			threadVec.emplace(threadVec.begin() + i, std::move(t));     	
         		}
                 
-                cout<< "waiting for threads" << endl;
         		for (auto& t : threadVec){
                     if(t.wait_for(std::chrono::seconds(600)) != future_status::ready){
                         cout << "timeout over, problem procesing data" << endl;
+                        return;
                     }			
         		}
                 fillFutPromVec();
-
-                cout << "saving complete point cloud..." << endl; 
-                pcl::io::savePCDFileASCII ("completePointCloud.pcd", *completePointCloud);
+                
+                pcl::io::savePCDFileASCII (dataPath + "completePointCloud.pcd", *completePointCloud);
                 completePointCloud->clear();
-                cout << "processing done..." << endl; 
+                cout << "all processing done..." << endl; 
         		//tu uz mam spojeny completePointCLoud, mozem icp na model a extrahovat rivety
         		//na kazdy rivet jedno vlakno
         	}

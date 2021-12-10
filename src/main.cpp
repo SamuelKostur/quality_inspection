@@ -100,12 +100,12 @@
         // function handle scanning of the one whole part
         if(movRobToScanPos(robotHomePose) != 0) return -1;
         for(auto& pose: robotScanPoses){
-          getchar();
+          //getchar();
           if(movRobToScanPos(pose) != 0) return -1;
           if(triggerScan() != 0) return -1;
         }
         if (movRobToScanPos(robotHomePose) != 0) return -1;
-
+        getchar();
         return 0;
       }
 
