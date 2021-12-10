@@ -112,7 +112,7 @@ class ProcessScan{
             transMatrix.setIdentity();   // Set to Identity to make bottom row of Matrix 0,0,0,1
             transMatrix.block<3,3>(0,0) = R;
             transMatrix.block<3,1>(0,3) = T;
-            pcl::transformPointCloud(*pointCloud, *pointCloud, transMatrix);            
+            pcl::transformPointCloudWithNormals(*pointCloud, *pointCloud, transMatrix);            
         }
 
         cv::Mat createTextureImage(const sensor_msgs::Image::ConstPtr& originalTexture){
@@ -133,17 +133,31 @@ class ProcessScan{
             for(int rowIdx = 0; rowIdx < img.rows; rowIdx++){
                 const uint8_t* imgRow = img.ptr<uint8_t>(rowIdx);
                 for(int colIdx = 0; colIdx < img.cols; colIdx++){
-                    pointCloudTexture->at(colIdx, rowIdx).intensity = imgRow[colIdx];
+                    pointCloudTexture->at(colIdx, rowIdx).intensity = imgRow[colIdx]; 
+                    //and yes pcl::point cloud has indexing with column first
                 }
             }
             return pointCloudTexture;
+        }
+
+        void correctNormals(pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud){
+            // apply contra transformation from photoneo ros pkg normals (where each is divided by 1000)
+            // to ensure normal vector size 1 (sqrt(nx^2+ny^2+nz^2))
+            for(int row = 0; row < pointCloud->height; row++){
+                for(int col = 0; col < pointCloud->width; col++){
+                    pointCloud->at(col, row).normal_x *= 1000;
+                    pointCloud->at(col, row).normal_y *= 1000;
+                    pointCloud->at(col, row).normal_z *= 1000;
+                }
+            }
         }
 
         void combCB (const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud, const sensor_msgs::Image::ConstPtr& originalTexture){
             static int currIdxRobPose = 0;
             cout << "combining partial point cloud with intensity " << currIdxRobPose << "..." << endl;
             pcl::PointCloud<pcl::PointNormal>::Ptr pointCloud (new pcl::PointCloud<pcl::PointNormal>);
-            pcl::fromROSMsg(*originalPointCloud,*pointCloud);        
+            pcl::fromROSMsg(*originalPointCloud,*pointCloud);    
+            correctNormals(pointCloud);
             cv::Mat img = createTextureImage(originalTexture);
             #if SAVE_PARTIAL_DATA
                 cv::imwrite(dataPath + "img" + std::to_string(currIdxRobPose) + ".bmp", img);
