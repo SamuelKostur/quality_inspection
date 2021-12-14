@@ -13,15 +13,22 @@
   #include <arpa/inet.h>
   #include <errno.h>
 
+  #include <csignal>
+
   typedef actionlib::SimpleActionServer<quality_inspection::MovRobToScanPosAction> Server;
+
+  std::function<void()> exitFunc;
 
   class RobotPoseSender{
     public: 
       ros::NodeHandle n;
       actionlib::SimpleActionServer<quality_inspection::MovRobToScanPosAction> as;
+      int sockfd_server;
       int sockfd_client;
 
       RobotPoseSender() : as(n, "movRobToScanPos", boost::bind(&RobotPoseSender::executeCB, this, _1), false){
+        exitFunc = boost::bind(&RobotPoseSender::movRobExitFunc, this);
+
         if(initSocket()!=0){
           std::cout << "Connection to robot unsuccessful" << std::endl;
           return;
@@ -29,6 +36,15 @@
         as.start();
 
         ros::spin();
+      }
+
+      void movRobExitFunc(){
+        printf("closing sockets.. \n");
+        close(sockfd_server);
+        close(sockfd_client);
+        //after closing there will be this in terminal:
+        //ERROR on accept: Bad file descriptor
+        //Connection to robot unsuccessful
       }
 
       int sendRobotCommand(double robot_pose_command [6]){
@@ -66,7 +82,6 @@
 
       int readRobotPose(quality_inspection::MovRobToScanPosResult *robotPos){
         char readBuffer[1024] = {0};
-        //int desReadStrLen = ; //error checking
         TiXmlDocument xml_in;
         int readStrLen = read(sockfd_client, readBuffer, 1024);
         xml_in.Parse(readBuffer);
@@ -104,7 +119,7 @@
 
       int initSocket(){
         // Create socket
-        int sockfd_server = socket(AF_INET, SOCK_STREAM, 0);
+        sockfd_server = socket(AF_INET, SOCK_STREAM, 0);
         if(sockfd_server < 0)
         {
           printf("Not able to create socket! \n");
@@ -152,8 +167,24 @@
       }
   };
   
+  void sigintCB(int signum){
+    static int sigintRaised = 0;
+    if(!sigintRaised){
+      sigintRaised = 1;
+      //if there is a serious problem while executing and we need to 
+      //properly exit programm use raise(SIGINT); followed by return; from currect thread (function)
+      exitFunc(); //this handles shutting down socket from RobotPoseSender class
+      ros::shutdown();
+      std::cout << "ros is shutting down" << std::endl;
+      while (ros::ok()){}
+      std::cout << "ros finished shutting down" << std::endl;
+      //exit() is called somewhere from ros::shutdown(), i tried it with atexit
+    }
+}
+
   int main(int argc, char** argv){
-    ros::init(argc, argv, "movRobToScanPosServer");
+    ros::init(argc, argv, "movRobToScanPosServer", ros::init_options::NoSigintHandler);
+    std::signal(SIGINT, sigintCB); //should be after ros::init()
     RobotPoseSender robotPoseSender;
     return 0;
   }

@@ -12,18 +12,25 @@
 #include <opencv2/imgcodecs.hpp>
 #include <ros/package.h>
 #include <boost/filesystem.hpp>
+#include <csignal>
+#include <chrono>
 
 typedef pcl::PointXYZINormal MyPoint;
 typedef pcl::PointCloud<MyPoint> MyPointCloud;
 
-#define SAVE_PARTIAL_DATA 1
+#define SAVE_PARTIAL_DATA 0
 
 using namespace std;
+
+std::function<void()> exitFunc;
+
 class ProcessScan{
     public:
         ros::NodeHandle n;
         ros::Subscriber pointCloudSub;
-        ros::Subscriber textureSub;    
+        ros::Subscriber textureSub;
+        std::promise<int> exitPromise;
+        std::shared_future<int> exitFuture;
         std::vector<std::promise<pcl::PointCloud<pcl::PointXYZINormal>::Ptr>> promiseVec;
     	std::vector<std::future<pcl::PointCloud<pcl::PointXYZINormal>::Ptr>> futureVec;
     	std::mutex mtx;
@@ -43,11 +50,16 @@ class ProcessScan{
         int numRobPoses;
  
         ProcessScan(){
+            exitFunc = boost::bind(&ProcessScan::procScanExitFunc, this);
+            exitFuture = exitPromise.get_future();
+
+            numRobPoses = robotScanPoses.size(); //this of course has to be before all references to this variable
+            futureVec.reserve(numRobPoses);
+            promiseVec.reserve(numRobPoses);
+            fillFutPromVec(); //call here to ensure that futures are ready before data callback is processed
+
             createDataPath();
             cout << dataPath << endl;
-            numRobPoses = robotScanPoses.size(); //this has to be first
-
-            fillFutPromVec(); //call here to ensure that futures are ready before data callback is processed
 
             std::thread endlessThread (&ProcessScan::endlessLoop, this);
 
@@ -57,7 +69,23 @@ class ProcessScan{
             sync.registerCallback(boost::bind(&ProcessScan::combCB, this, _1, _2));
 
             ros::spin();
-            endlessThread.join(); // or use std:;thread::detach
+            endlessThread.join();
+        }
+
+        void procScanExitFunc(){
+            cout << "exiting threads started" << endl;
+            exitPromise.set_value(1);
+            if(!promiseVec.empty()){
+                for(int i  = 0; i < promiseVec.size(); i++){
+                    try{
+                        promiseVec[i].set_value((MyPointCloud::Ptr)nullptr);
+                    }
+                    catch(const std::future_error& e)
+                    {
+                        //catch error which happens when sigint was evoked while promise was already set 
+                    }
+                }
+            }
         }
 
         void createDataPath(){
@@ -163,7 +191,13 @@ class ProcessScan{
                 cv::imwrite(dataPath + "img" + std::to_string(currIdxRobPose) + ".bmp", img);
             #endif
             pcl::PointCloud<pcl::PointXYZINormal>::Ptr pointCloudNormI= addTextureToPointCloud(pointCloud, img);
-
+            
+            //ros::shutdown(); would eventually finish this callback, 
+            //however i want to prevent setting promise second time
+            if(exitFuture.wait_for(std::chrono::seconds(0)) == future_status::ready){
+                cout << "exiting callback " << currIdxRobPose << endl;
+                return;
+            }
             promiseVec[currIdxRobPose].set_value(pointCloudNormI);
             currIdxRobPose++;
             currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
@@ -172,6 +206,11 @@ class ProcessScan{
         void processPointCloud(std::future<MyPointCloud::Ptr> future, int currIdxRobPose){
             cout << "waiting for partial point cloud" << currIdxRobPose << "..." << endl;
         	MyPointCloud::Ptr pointCloud = future.get();
+            if(exitFuture.wait_for(std::chrono::seconds(0)) == future_status::ready){
+                cout << "exiting thread " << currIdxRobPose << endl;
+                return;
+            }
+
             cout << "processing partial point cloud" << currIdxRobPose << "..." << endl;
             #if SAVE_PARTIAL_DATA
                 pcl::io::savePCDFileASCII (dataPath + "pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
@@ -187,8 +226,6 @@ class ProcessScan{
         }
 
         void fillFutPromVec(){
-            futureVec.reserve(numRobPoses);
-            promiseVec.reserve(numRobPoses);
             for(int i  = 0; i < numRobPoses; i++){
         		std::promise<MyPointCloud::Ptr> promise;
                 futureVec.emplace(futureVec.begin() + i, promise.get_future());
@@ -209,11 +246,18 @@ class ProcessScan{
         		}
                 
         		for (auto& t : threadVec){
-                    if(t.wait_for(std::chrono::seconds(600)) != future_status::ready){
-                        cout << "timeout over, problem procesing data" << endl;
+                    if(t.wait_for(std::chrono::seconds(240)) != future_status::ready){
+                        cout << "maximum time of scanning one part reached" << endl;
+                        raise(SIGINT);
                         return;
                     }			
         		}
+
+                if(exitFuture.wait_for(std::chrono::seconds(0)) == future_status::ready){
+                    cout << "exiting endlessLoop thread" << endl;
+                    return;
+                }
+
                 fillFutPromVec();
                 
                 pcl::io::savePCDFileASCII (dataPath + "completePointCloud.pcd", *completePointCloud);
@@ -225,9 +269,26 @@ class ProcessScan{
         }
 };
 
-int main(int argc, char** argv){
-    ros::init(argc, argv, "processScanNode");    
+void sigintCB(int signum){
+    static int sigintRaised = 0;
+    if(!sigintRaised){
+        sigintRaised = 1;
+        //if there is a serious problem while executing and we need to 
+        //properly exit programm use raise(SIGINT); followed by return; from currect thread (function)
+        exitFunc(); //this handles shutting down threads in ProcessScan class
+        ros::shutdown();
+        cout << "ros is shutting down" << endl;
+        while (ros::ok()){}
+        cout << "ros finished shutting down" << endl;
+        //exit() is called somewhere from ros::shutdown(), i tried it with atexit
+        //however atexit happens after all threads made from main thread are joined
+    }
+}
+
+int main(int argc, char** argv){    
+    ros::init(argc, argv, "processScanNode", ros::init_options::NoSigintHandler);  
+    std::signal(SIGINT, sigintCB); //should be after ros::init()    
     ProcessScan processScan;
-    //processScan.endlessLoop();
+    
     return 0;
 }
