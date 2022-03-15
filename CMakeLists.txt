@@ -15,6 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   message_generation
   cmake_modules
   phoxi_camera
+  image_transport
 )
 
 ## System dependencies are found with CMake's conventions
@@ -142,6 +143,7 @@ include_directories(
 add_executable(movRobToScanPos src/movRobToScanPos.cpp)
 add_executable(main src/main.cpp)
 add_executable(processScan src/processScan.cpp)
+add_executable(testdataPublisherInPC src/testdataPublisherInPC.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -153,6 +155,7 @@ add_executable(processScan src/processScan.cpp)
 add_dependencies(movRobToScanPos ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(main ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(processScan ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(testdataPublisherInPC ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ## Specify libraries to link a library or executable target against
 target_link_libraries(movRobToScanPos
   ${catkin_LIBRARIES}
@@ -162,6 +165,9 @@ target_link_libraries(main
   ${catkin_LIBRARIES}
 )
 target_link_libraries(processScan
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(testdataPublisherInPC
   ${catkin_LIBRARIES}
 )
 #############

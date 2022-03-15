@@ -2,17 +2,20 @@
   "configurations": [
     {
       "browse": {
-        "databaseFilename": "",
         "limitSymbolsToIncludedHeaders": true
       },
       "includePath": [
-        "/home/frixys/ardupilot_ws/devel/include/**",
+        "/home/frixys/catkin_ws/devel/include/**",
         "/opt/ros/melodic/include/**",
-        "/home/frixys/ardupilot_ws/src/lrs_mavros_example/include/**",
-        "/home/frixys/ardupilot_ws/src/quality_inspection/include/**",
+        "/home/frixys/catkin_ws/src/phoxi_camera/include/**",
+        "/home/frixys/catkin_ws/src/quality_inspection/include/**",
         "/usr/include/**"
       ],
-      "name": "ROS"
+      "name": "ROS",
+      "intelliSenseMode": "gcc-x64",
+      "compilerPath": "/usr/bin/gcc",
+      "cStandard": "gnu11",
+      "cppStandard": "c++14"
     }
   ],
   "version": 4
