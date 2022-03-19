@@ -16,6 +16,7 @@ find_package(catkin REQUIRED COMPONENTS
   cmake_modules
   phoxi_camera
   image_transport
+  sensor_msgs
 )
 
 ## System dependencies are found with CMake's conventions
@@ -59,11 +60,10 @@ find_package(TinyXML REQUIRED)
 # )
 
 ## Generate services in the 'srv' folder
-# add_service_files(
-#   FILES
-#   Service1.srv
-#   Service2.srv
-# )
+add_service_files(
+  FILES
+  create2Dprojections.srv
+)
 
 ## Generate actions in the 'action' folder
 add_action_files(
@@ -75,7 +75,9 @@ add_action_files(
 ## Generate added messages and services with any dependencies listed here
 generate_messages(
   DEPENDENCIES
-  actionlib_msgs#   std_msgs
+  actionlib_msgs
+  std_msgs
+  sensor_msgs
 )
 
 ################################################
@@ -114,6 +116,7 @@ catkin_package(
 #  DEPENDS system_lib
 DEPENDS message_runtime
 DEPENDS TinyXML
+DEPENDS sensor_msgs
 )
 
 ###########
@@ -142,8 +145,9 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 add_executable(movRobToScanPos src/movRobToScanPos.cpp)
 add_executable(main src/main.cpp)
-add_executable(processScan src/processScan.cpp)
+add_executable(scanProcessingNode src/scanProcessingNode.cpp src/scanProcessing.cpp)
 add_executable(testdataPublisherInPC src/testdataPublisherInPC.cpp)
+add_executable(projectionsNode src/projectionsNode.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -154,8 +158,9 @@ add_executable(testdataPublisherInPC src/testdataPublisherInPC.cpp)
 ## same as for the library above
 add_dependencies(movRobToScanPos ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(main ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-add_dependencies(processScan ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(scanProcessingNode ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(testdataPublisherInPC ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(projectionsNode ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ## Specify libraries to link a library or executable target against
 target_link_libraries(movRobToScanPos
   ${catkin_LIBRARIES}
@@ -164,10 +169,13 @@ target_link_libraries(movRobToScanPos
 target_link_libraries(main
   ${catkin_LIBRARIES}
 )
-target_link_libraries(processScan
+target_link_libraries(scanProcessingNode
   ${catkin_LIBRARIES}
 )
 target_link_libraries(testdataPublisherInPC
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(projectionsNode
   ${catkin_LIBRARIES}
 )
 #############

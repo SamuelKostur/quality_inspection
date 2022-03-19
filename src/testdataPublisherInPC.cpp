@@ -26,41 +26,16 @@
 
 #include<Semaphore.h>
 
+#include <pcl/filters/normal_space.h>
+
 typedef pcl::PointNormal MyPoint;
 typedef pcl::PointCloud<MyPoint> MyPointCloud;
 
 namespace pcl{
   using boost::shared_ptr;
   using boost::make_shared;
+  using Indices = std::vector<int>;
 };
-
-// class semaphore {
-//     //https://stackoverflow.com/questions/4792449/c0x-has-no-semaphores-how-to-synchronize-threads
-//     std::mutex mutex_;
-//     std::condition_variable condition_;
-//     unsigned long count_;
-//     const unsigned long maxVal;
-
-// public:
-//     semaphore(int initVal, int maxVal): maxVal(maxVal), count_(initVal){}
-
-//     void release() {
-//         std::lock_guard<decltype(mutex_)> lock(mutex_);
-//         count_ = std::min(maxVal, count_ + 1);
-//         condition_.notify_one();
-//         std::cout << count_ << std::endl;
-//     }
-
-//     void acquire() {
-//         std::unique_lock<decltype(mutex_)> lock(mutex_);
-//         while(!count_){ // Handle spurious wake-ups.        
-//             condition_.wait(lock);
-//         }
-//         --count_;
-//         // netreba count_ = std::max((unsigned long) 0, count_ - 1); lebo while nepusti ak count nieje vacsie ako 0
-//         std::cout << count_ << std::endl;
-//     }
-// };
 
 Semaphore sem(0,1);
 
@@ -82,7 +57,7 @@ class TestPub{
             std::cout << "service ready" << std::endl;
 
             std::thread endlessThread (&TestPub::mainEndlessLoop, this);
-
+            normalSubSampling( );
             ros::spin();
             endlessThread.join();
         }
@@ -168,9 +143,29 @@ class TestPub{
             std::cout << pointCloud0->at(1).x << " " << pointCloud1->at(1).x;
         }
 
+        
+        void normalSubSampling( ){
+            std::cout << "sampling" << std::endl;
+            pcl::PointCloud<pcl::PointNormal>::Ptr cloudIn= pcl::make_shared<pcl::PointCloud<pcl::PointNormal>>();
+            pcl::PointCloud<pcl::PointNormal>  cloudOut;
+            pcl::Indices ind;
+            pcl::io::loadPCDFile<pcl::PointNormal> (dataPath + "pointCloudCAD"+ ".pcd", *cloudIn);
+
+            std::cout << cloudIn->size() << std::endl;
+
+            pcl::NormalSpaceSampling<pcl::PointNormal, pcl::PointNormal> subSamp;
+            subSamp.setSample(50000);
+            subSamp.setInputCloud(cloudIn);            
+            subSamp.setNormals(cloudIn);
+            subSamp.setSeed(0);
+            subSamp.setBins(100, 100, 100);
+            subSamp.filter(cloudOut);
+            std::cout << cloudOut.size() << std::endl;
+        }
+
         void simulateScanning (){
             static int currIdxRobPose = 0;
-            //testConcatenatePointCLouds();
+            
             MyPointCloud::Ptr pointCloud = pcl::make_shared<MyPointCloud>();
             cv::Mat img;
             pcl::io::loadPCDFile<pcl::PointNormal> (dataPath + "pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", *pointCloud);
