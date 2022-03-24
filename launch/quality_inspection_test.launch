@@ -1,8 +1,5 @@
 <launch>
-<include file="$(find phoxi_camera)/launch/phoxi_camera.launch" />
-
-<node pkg="quality_inspection" name="main" type="main" output="screen" launch-prefix="gnome-terminal --command"/>
-<node pkg="quality_inspection" name="movRobToScanPos" type="movRobToScanPos" output="screen" launch-prefix="gnome-terminal --command"/>
+<node pkg="quality_inspection" name="testdataPublisherInPC" type="testdataPublisherInPC" output="screen" launch-prefix="gnome-terminal --command"/>
 <node pkg="quality_inspection" name="scanProcessingNode" type="scanProcessingNode" output="screen" launch-prefix="gnome-terminal --command"/>
 <node pkg="quality_inspection" name="projectionsNode" type="projectionsNode" output="screen" launch-prefix="gnome-terminal --command"/>
 </launch>

@@ -80,3 +80,53 @@ void correctNormals(MyPointCloud& pointCloud){
         }
     }
 }
+
+void extractTable(MyPointCloud& pointCloud){
+    float tableZ = 0.042035;
+    pcl::PointIndices::Ptr tableIdx (new pcl::PointIndices);
+    for(int i = 0; i < pointCloud.size() ; i++){
+        if(pointCloud[i].z < tableZ){
+            tableIdx->indices.push_back(i);
+        }
+    }
+
+    pcl::ExtractIndices<MyPoint> extraction;
+    extraction.setInputCloud(pointCloud.makeShared());
+    extraction.setIndices(tableIdx);
+    extraction.setNegative(true);
+    extraction.filter(pointCloud);
+}
+
+void extractDistantPoints(pcl::PointCloud<pcl::PointNormal>::Ptr refCloud, MyPointCloud& regCloud){
+    float outlierDistTreshold = 0.0025; //distance in centimeters
+    float outSqrDistThresh = outlierDistTreshold * outlierDistTreshold;
+    pcl::PointIndices::Ptr outlierIdxs (new pcl::PointIndices);
+
+    pcl::search::KdTree<pcl::PointNormal> kdtree;
+    kdtree.setInputCloud(refCloud);
+    pcl::PointIndices neighbourIndices;
+    neighbourIndices.indices.resize(1);
+    std::vector<float> neighbourSqrDistances;
+    neighbourSqrDistances.resize(1);
+
+    for (int i = 0; i < regCloud.size(); i++){
+        kdtree.nearestKSearchT(regCloud[i], 1, neighbourIndices.indices, neighbourSqrDistances);
+        // if(neighbourSqrDistances[0] > outSqrDistThresh){
+        //     outlierIdxs->indices.push_back(i);
+        // }
+        pcl::PointNormal neighbour = refCloud->at(neighbourIndices.indices[0]);
+        float dotProduct = ((regCloud.at(i).x - neighbour.x) * neighbour.normal_x +
+                        (regCloud.at(i).y - neighbour.y) * neighbour.normal_y +
+                        (regCloud.at(i).z - neighbour.z) * neighbour.normal_z);
+        if(std::abs(dotProduct) > outlierDistTreshold){
+            outlierIdxs->indices.push_back(i);
+        }
+       
+    }
+    std::cout << outlierIdxs->indices.size() << std::endl;
+    pcl::ExtractIndices<MyPoint> extraction;
+    extraction.setInputCloud(regCloud.makeShared());
+    extraction.setIndices(outlierIdxs);
+    extraction.setNegative(true);
+    extraction.filter(regCloud);
+}

@@ -37,8 +37,6 @@ namespace pcl{
   using Indices = std::vector<int>;
 };
 
-Semaphore sem(0,1);
-
 class TestPub{
     public:
         ros::NodeHandle n;
@@ -46,10 +44,11 @@ class TestPub{
         ros::Publisher texturePub;
         ros::ServiceServer comm_server_main_processScan;
         std::string dataPath;
+        Semaphore sem;
         
         int numRobPoses = 7;
  
-        TestPub(){
+        TestPub():sem(0,1){
             comm_server_main_processScan = n.advertiseService("comm_main_processScan", &TestPub::semServCB, this);
             createDataPath();
             pointCloudPub = n.advertise<sensor_msgs::PointCloud2>("/phoxi_camera/pointcloud", 1);
@@ -57,7 +56,6 @@ class TestPub{
             std::cout << "service ready" << std::endl;
 
             std::thread endlessThread (&TestPub::mainEndlessLoop, this);
-            normalSubSampling( );
             ros::spin();
             endlessThread.join();
         }

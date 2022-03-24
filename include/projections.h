@@ -68,6 +68,25 @@ class Projections{
     }
 
     template<typename T>
+    void flipRivetCloud(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud){
+      // ensure that rotated point cloud doesnt have reversed Z coordinate
+      float elevatedRadius = 0.005; //radius of the area which is elevated (center of the rivet)
+      float avgDepth = 0;
+      float avgDepthElevated;
+      for(int i = 0; i < rivetCloud->points.size(); i++){
+        avgDepth += rivetCloud->points[i].z;
+        if ( sqrt( pow(rivetCloud->points[i].x,2.0) + pow(rivetCloud->points[i].y,2.0)) <= elevatedRadius){
+          avgDepthElevated += rivetCloud->points[i].z;
+        }        
+      }
+      if(avgDepthElevated < avgDepth){
+        for(int i = 0; i < rivetCloud->points.size(); i++){
+          rivetCloud->points[i].z *= -1; 
+        }
+      }
+    }
+
+    template<typename T>
     void cutRelevantRivetCloudArea(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud){
       //crop rivet point cloud so that only relevant circular area around Rivet remains
       float relevantRadius = 0.01; //a bit bigger then offset
@@ -94,6 +113,9 @@ class Projections{
       //rotate rivet point cloud so it will lay in the XY plane
       rotateRivetPointCloudToXYplane(rivetCloud);
       
+      //ensure that rotated point cloud doesnt have reversed Z coordinate
+      flipRivetCloud(rivetCloud);
+
       //crop rivet point cloud so that only relevant circular area around Rivet remains
       cutRelevantRivetCloudArea(rivetCloud);
       

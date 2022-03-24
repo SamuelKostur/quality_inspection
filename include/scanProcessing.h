@@ -45,6 +45,8 @@ void transformPointCloudFromTCPtoRobot(std::vector<double> robotPose, MyPointClo
 cv::Mat createTextureImage(const sensor_msgs::Image::ConstPtr& originalTexture);
 void addTextureToPointCloud(MyPointCloud& pointCloud, cv::Mat& img);
 void correctNormals(MyPointCloud& pointCloud);
+void extractTable(MyPointCloud& pointCloud);
+void extractDistantPoints(pcl::PointCloud<pcl::PointNormal>::Ptr refCloud, MyPointCloud& regCloud);
 
 /////////////////////////templates////////////////////////////////
 template<typename T>
@@ -199,4 +201,37 @@ int loadPointCloud(pcl::shared_ptr<pcl::PointCloud<T>> cloud, std::string name){
       << " data points from" +  name + "with the following fields: "
       << std::endl;
     return 0;
+}
+
+template<typename T1, typename T2>
+std::vector<float> calculateDistances(pcl::shared_ptr<pcl::PointCloud<T1>> refCloud, pcl::PointCloud<T2>& cloud){
+  //in this case ref cloud can be also registered cloud, when distances are calculated for every point of CAD model
+  std::vector<float> distances;
+  distances.resize(refCloud->size());
+
+  pcl::search::KdTree<pcl::PointNormal> kdtree;
+  kdtree.setInputCloud(refCloud);
+  pcl::PointIndices neighbourIndices;
+  neighbourIndices.indices.resize(1);
+  std::vector<float> neighbourSqrDistances;
+  neighbourSqrDistances.resize(1);
+  
+  // //point to point
+  // for (int i = 0; i < cloud.size(); i++){
+  //   kdtree.nearestKSearchT(cloud[i], 1, neighbourIndices.indices, neighbourSqrDistances);
+  //   distances[i] = std::sqrt(neighbourSqrDistances[0]);
+  // }
+
+  //point to plane
+  for (int i = 0; i < cloud.size(); i++){
+    kdtree.nearestKSearchT(cloud[i], 1, neighbourIndices.indices, neighbourSqrDistances);
+    T1 neighbour = refCloud->at(neighbourIndices.indices[0]);
+    //project distance vector on normal vector
+    float dotProduct = ((cloud.at(i).x - neighbour.x) * neighbour.normal_x +
+                        (cloud.at(i).y - neighbour.y) * neighbour.normal_y +
+                        (cloud.at(i).z - neighbour.z) * neighbour.normal_z);
+    distances[i] = std::abs(dotProduct); //dont need to divide by length of normal since normal is normalized
+  }
+
+  return distances;
 }

@@ -61,6 +61,7 @@ MyPointCloud ScanProcessingNode::processPointCloud(std::future<MyPointCloud> fut
     #endif
     extractUnmeasuredPoints(pointCloud);  //prepisat typ co ide do funkcie alebo spravit template
     transformPointCloudFromTCPtoRobot(robotScanPoses[currIdxRobPose], pointCloud);
+    extractTable(pointCloud);
     #if SAVE_PARTIAL_DATA
         pcl::io::savePCDFileASCII (dataPath + "pointCloud" + std::to_string(currIdxRobPose) + ".pcd", pointCloud);
     #endif
@@ -141,8 +142,8 @@ void ScanProcessingNode::mainThread3Loop(){
         //initial allignment, supposing that inspected parts are arriving with aproximately same position
         //newPcl::transformPointCloudWithNormals(*CPC_MT3, *CPC_MT3, initialAllign);
 
-        std::cout << "coarse allignment..." << std::endl;
         //coarse allignment CPC to CAD
+        std::cout << "coarse allignment..." << std::endl;
         //Eigen::Affine3f totalTransform =  alignPointClouds(CPC_MT3, CADcloud, 8000, 50000, 15, 1e-4, 0.05);
         Eigen::Affine3f totalTransform =  alignPointClouds(CPC_MT3, CADcloud, 8000, 100000, 6, 1e-5, 0.05);
         //std::cout  << totalTransform.matrix() << std::endl;
@@ -169,24 +170,35 @@ void ScanProcessingNode::mainThread3Loop(){
             }
             CPC_MT3->operator+=(*PPCvec.at(i));
         }
-          
-        quality_inspection::create2Dprojections CPCmsg;
+        
+        //ICP duration
+        auto t2 = std::chrono::high_resolution_clock::now();
+        auto durationRegProj= std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+        std::cout << "Duration Registration and Projections: " << durationRegProj.count()/1000000.0 << std::endl;
+        
+        //extract distant points
+        std::cout << CPC_MT3->size() << std::endl;
+        auto tDistStart = std::chrono::high_resolution_clock::now();
+        extractDistantPoints(CADcloud, *CPC_MT3);
+        auto tDistEnd = std::chrono::high_resolution_clock::now();
+        auto durationDistances= std::chrono::duration_cast<std::chrono::microseconds>(tDistEnd - tDistStart);
+        std::cout << "Duration distances: " << durationDistances.count()/1000000.0 << std::endl;
+        std::cout << CPC_MT3->size() << std::endl;
 
+        //create projections from register CPC
+        quality_inspection::create2Dprojections CPCmsg;
         pcl::toROSMsg(*CPC_MT3, CPCmsg.request.pc2);
         client_srvs_create2Dprojections.call(CPCmsg);
         std::cout << CPCmsg.response.message << std::endl;        
         //pcl::io::savePCDFileASCII (dataPath + "completePointCloudFineAlligned.pcd", *CPC_MT3);
 
         sem_MT2_MT3.release();
+        std::cout << "processing in MT3 done" << std::endl;
         //this has to be last to prevent creating new promise and future before exiting
         if(exitFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
             std::cout << "exiting main thread 3" << std::endl;
             return;
         }
-        std::cout << "processing in MT3 done" << std::endl;
-        auto t2 = std::chrono::high_resolution_clock::now();
-        auto durationRegProj= std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-        std::cout << "Duration Registration and Projections: " << durationRegProj.count()/1000000.0 << std::endl;
     }
 }
 
