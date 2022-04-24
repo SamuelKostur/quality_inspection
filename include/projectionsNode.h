@@ -8,6 +8,7 @@
 #include <chrono>
 #include <vector>
 #include <future>
+#include <array>
 
 
 typedef pcl::PointXYZINormal MyPoint;
@@ -34,8 +35,10 @@ class ProjectionsNode{
     unsigned long partID;
 
     //x, y, z location of the center of a rivet in meters
-    float rivetLocations [2][3] ={{0.077743f, 0.117416f, -0.033278f},
-                                  {0.0751653f, -0.175274f, -0.0346544f}};
+    // float rivetLocations [3][3] ={{0.060848f, -0.152035f, -0.036782},
+    //                               {0.063324f, 0.139139f, -0.035323f},
+    //                               {-0.065320f, 0.145271f, 0.005731f}};
+    std::vector<std::vector<float>> rivetLocations;
 
     void createDataPath();
     std::string currPartFolder();
@@ -43,5 +46,7 @@ class ProjectionsNode{
     std::string currScanningDataFolder();
     bool create2DprojectionsCB(quality_inspection::create2Dprojections::Request &req, quality_inspection::create2Dprojections::Response &res);
     void createProjections();
-    void adjustPCcreateProj(MyPointCloud rivetCloud, Projections projections, float* rivetLocation, int rivetID);
+    std::array<float,2> adjustPCcreateProj(MyPointCloud rivetCloud, Projections projections, std::vector<float> rivetLocation, int rivetID);
+    void loadRivetPositions();
+    void saveRivetCenterDistances(std::vector<std::future<std::array<float,2>>>& threadVec);
 };

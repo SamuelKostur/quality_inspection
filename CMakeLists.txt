@@ -22,7 +22,7 @@ find_package(catkin REQUIRED COMPONENTS
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
 find_package(TinyXML REQUIRED)
-
+find_package(OpenCV REQUIRED)
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
 ## See http://ros.org/doc/api/catkin/html/user_guide/setup_dot_py.html
@@ -148,6 +148,7 @@ add_executable(main src/main.cpp)
 add_executable(scanProcessingNode src/scanProcessingNode.cpp src/scanProcessing.cpp)
 add_executable(testdataPublisherInPC src/testdataPublisherInPC.cpp)
 add_executable(projectionsNode src/projectionsNode.cpp)
+add_executable(transformCAD src/transformCAD.cpp)
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
 ## target back to the shorter version for ease of user use
@@ -161,6 +162,7 @@ add_dependencies(main ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARG
 add_dependencies(scanProcessingNode ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(testdataPublisherInPC ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 add_dependencies(projectionsNode ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+add_dependencies(transformCAD ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
 ## Specify libraries to link a library or executable target against
 target_link_libraries(movRobToScanPos
   ${catkin_LIBRARIES}
@@ -176,6 +178,9 @@ target_link_libraries(testdataPublisherInPC
   ${catkin_LIBRARIES}
 )
 target_link_libraries(projectionsNode
+  ${catkin_LIBRARIES}
+)
+target_link_libraries(transformCAD
   ${catkin_LIBRARIES}
 )
 #############

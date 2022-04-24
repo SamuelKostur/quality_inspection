@@ -4,6 +4,8 @@ std::function<void()> exitFunc;
 
 /////////////////////////////main thread 1/////////////////////////////////
 void ScanProcessingNode::combCB (const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud, const sensor_msgs::Image::ConstPtr& originalTexture){
+    auto t1 = std::chrono::high_resolution_clock::now(); 
+
     static int currIdxRobPose = 0;
     std::cout << "combining partial point cloud with intensity " << currIdxRobPose << "..." << std::endl;
     //I have to do this in 2 steps, otherweise i get warning because originalPointCloud
@@ -32,6 +34,10 @@ void ScanProcessingNode::combCB (const sensor_msgs::PointCloud2::ConstPtr& origi
     prom_vec_MT1_MT2[currIdxRobPose].set_value(pointCloud);
     currIdxRobPose++;
     currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
+
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "Dur MT1: " << dur.count()/1000000.0 << std::endl;
 }
 
 
@@ -50,6 +56,7 @@ MyPointCloud ScanProcessingNode::processPointCloud(std::future<MyPointCloud> fut
     std::cout << "waiting for partial point cloud" << currIdxRobPose << "..." << std::endl;
     //sleep(15);
     MyPointCloud pointCloud = future.get();
+    auto t1 = std::chrono::high_resolution_clock::now(); 
     std::cout << "started processing point cloud" << currIdxRobPose << "..." << std::endl;
     if(exitFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
         std::cout << "exiting thread " << currIdxRobPose << std::endl;
@@ -67,6 +74,10 @@ MyPointCloud ScanProcessingNode::processPointCloud(std::future<MyPointCloud> fut
     #endif
     
     std::cout << "processing point cloud" << currIdxRobPose << "done..." << std::endl;
+
+    auto t2 = std::chrono::high_resolution_clock::now();
+    auto dur = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+    std::cout << "Dur MT2 procesPointCloud: " << dur.count()/1000000.0 << std::endl;
     return pointCloud;
 }
 
@@ -85,12 +96,18 @@ void ScanProcessingNode::mainThread2Loop(){
                 raise(SIGINT);
                 return;
             }
-            else{
+            else{                
+                auto t1 = std::chrono::high_resolution_clock::now();
+
                 //this is here, because otherwise there is a problem when later scan is processed faster then previous
                 //if i want to ensure ordering of point cloud based on scan order
                 completePointCloud->operator+=(threadVec[i].get());
                 PPCindices[i+1] = completePointCloud->size();
                 resetPromFut(prom_vec_MT1_MT2.at(i), fut_vec_MT1_MT2.at(i));
+
+                auto t2 = std::chrono::high_resolution_clock::now();
+                auto dur = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+                std::cout << "Dur MT2 part 1: " << dur.count()/1000000.0 << std::endl;
             }
         }
 
@@ -100,6 +117,7 @@ void ScanProcessingNode::mainThread2Loop(){
         }
 
         //pcl::io::savePCDFileASCII (dataPath + "completePointCloud.pcd", *completePointCloud);
+        auto t1 = std::chrono::high_resolution_clock::now();
 
         sem_MT2_MT3.acquire();
 
@@ -114,6 +132,10 @@ void ScanProcessingNode::mainThread2Loop(){
         std::cout << "all processing done..." << std::endl; 
         std_srvs::SetBool empty;        
         client_srvs_main_scanProcessing.call(empty);
+
+        auto t2 = std::chrono::high_resolution_clock::now();
+        auto dur = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+        std::cout << "Dur MT2 part 2: " << dur.count()/1000000.0 << std::endl;
     }    
 }
 
@@ -149,6 +171,8 @@ void ScanProcessingNode::mainThread3Loop(){
         //std::cout  << totalTransform.matrix() << std::endl;
         //pcl::io::savePCDFileASCII (dataPath + "completePointCloudCoarseAlligned.pcd", *CPC_MT3);
 
+        auto tfine = std::chrono::high_resolution_clock::now(); 
+
         //fine allignment PPC to CAD
         std::cout << "fine allignment..." << std::endl;
         std::vector<MyPointCloud::Ptr> PPCvec;
@@ -162,6 +186,8 @@ void ScanProcessingNode::mainThread3Loop(){
         std::cout << "clearing previous CPC..." << std::endl;
         CPC_MT3->clear();
 
+        auto tfine2 = std::chrono::high_resolution_clock::now(); 
+
         for (int i = 0; i < numRobPoses; i++){
             if(threadVec.at(i).wait_for(std::chrono::seconds(240)) != std::future_status::ready){
                 std::cout << "maximum time of scanning one part reached" << std::endl;
@@ -173,8 +199,12 @@ void ScanProcessingNode::mainThread3Loop(){
         
         //ICP duration
         auto t2 = std::chrono::high_resolution_clock::now();
-        auto durationRegProj= std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-        std::cout << "Duration Registration and Projections: " << durationRegProj.count()/1000000.0 << std::endl;
+        auto durationFineRegPrep= std::chrono::duration_cast<std::chrono::microseconds>(tfine2 - tfine);
+        std::cout << "Duration fine registration prep" << durationFineRegPrep.count()/1000000.0 << std::endl;
+        auto durationFineReg= std::chrono::duration_cast<std::chrono::microseconds>(t2 - tfine);
+        std::cout << "Duration fine registration" << durationFineReg.count()/1000000.0 << std::endl;
+        auto durationReg= std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
+        std::cout << "Duration coarse and fine registration" << durationReg.count()/1000000.0 << std::endl;
         
         //extract distant points
         std::cout << CPC_MT3->size() << std::endl;
@@ -223,7 +253,7 @@ ScanProcessingNode::ScanProcessingNode(): sem_MT2_MT3(1, 1) {
     //create datapath and load CAD model for registration
     createDataPath();
     std::cout << dataPath << std::endl;
-    loadPointCloud(CADcloud, dataPath + "pointCloudCAD.pcd");
+    loadPointCloud(CADcloud, dataPath + "pointCloudCAD407Ktransformed.pcd");
 
     //initialize Main thread 2 and main thread 3
     std::thread mainThread2 (&ScanProcessingNode::mainThread2Loop, this);

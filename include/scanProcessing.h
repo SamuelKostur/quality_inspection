@@ -93,6 +93,7 @@ Eigen::Affine3f doICP(pcl::shared_ptr<pcl::PointCloud<T1>> regCloud, pcl::PointC
   icp.setTransformationEpsilon(maxMSE); //temporary as maxMSE
 
   pcl::PointCloud<pcl::PointNormal>::Ptr tempRegCloud (new pcl::PointCloud<pcl::PointNormal>);
+  auto tsubsample = std::chrono::high_resolution_clock::now();
   normalSubSampling(regCloudPNormal, *tempRegCloud, maxRandomSamples, 10);
   auto t1 = std::chrono::high_resolution_clock::now();
   icp.setInputSource(tempRegCloud);
@@ -100,7 +101,8 @@ Eigen::Affine3f doICP(pcl::shared_ptr<pcl::PointCloud<T1>> regCloud, pcl::PointC
   icp.align(*tempRegCloud);
   auto t2 = std::chrono::high_resolution_clock::now();
   auto durationICP = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
-  std::cout << "duration ICP: " << durationICP.count()/1000000.0 <<std::endl;
+  auto durationSubsampling = std::chrono::duration_cast<std::chrono::microseconds>(t1 - tsubsample);
+  std::cout << "duration ICP: " << durationICP.count()/1000000.0 <<  "duration subsampling: " << durationSubsampling.count()/1000000.0 <<std::endl;
   newPcl::transformPointCloudWithNormals(*regCloud, *regCloud, icp.getFinalTransformation());
   return (Eigen::Affine3f) icp.getFinalTransformation();
 }
