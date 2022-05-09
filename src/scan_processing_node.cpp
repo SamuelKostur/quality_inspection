@@ -1,6 +1,4 @@
-#include <scanProcessingNode.h>
-
-std::function<void()> exitFunc;
+#include <scan_processing_node.h>
 
 /////////////////////////////main thread 1/////////////////////////////////
 void ScanProcessingNode::combCB (const sensor_msgs::PointCloud2::ConstPtr& originalPointCloud, const sensor_msgs::Image::ConstPtr& originalTexture){
@@ -20,7 +18,7 @@ void ScanProcessingNode::combCB (const sensor_msgs::PointCloud2::ConstPtr& origi
 
     cv::Mat img = createTextureImage(originalTexture);
     #if SAVE_PARTIAL_DATA
-        cv::imwrite(dataPath + "img" + std::to_string(currIdxRobPose) + ".bmp", img);
+        //cv::imwrite(partialOutputDataPath + "img" + std::to_string(currIdxRobPose) + ".bmp", img);
     #endif
     addTextureToPointCloud(pointCloud, img);
     
@@ -33,7 +31,7 @@ void ScanProcessingNode::combCB (const sensor_msgs::PointCloud2::ConstPtr& origi
 
     prom_vec_MT1_MT2[currIdxRobPose].set_value(pointCloud);
     currIdxRobPose++;
-    currIdxRobPose = (currIdxRobPose < numRobPoses) ? currIdxRobPose : 0;
+    currIdxRobPose = (currIdxRobPose < numRobScanPoses) ? currIdxRobPose : 0;
 
     auto t2 = std::chrono::high_resolution_clock::now();
     auto dur = std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
@@ -42,6 +40,36 @@ void ScanProcessingNode::combCB (const sensor_msgs::PointCloud2::ConstPtr& origi
 
 
 /////////////////////////////main thread 2/////////////////////////////////
+void applyBadTransf(MyPointCloud& pointCloud, std::string path){
+    // // a little translation and rotation
+    Eigen::Matrix4f tf = (Eigen::Matrix4f() << 0.9654, 0.251, -0.0712, -0.0234,
+                                               -0.2539, 0.9667, -0.0349, 0.0963,
+                                               0.060, 0.0518, 0.9968, -0.0398,
+                                               0, 0, 0, 1).finished();
+    // // aproximately 90 degrees
+    // Eigen::Matrix4f tf = (Eigen::Matrix4f() << 0.3601, 0.9329, 0, -0.0538,
+    //                                            -0.9329, 0.3601, 0, 0.5226,
+    //                                            0, 0, 1, 0,
+    //                                            0, 0, 0, 1).finished();
+    // aproximately 135 degrees
+    // Eigen::Matrix4f tf = (Eigen::Matrix4f() << -0.3992, 0.9169, 0, 0.2199,
+    //                                            -0.9169, -0.3992, 0, 0.7453,
+    //                                            0, 0, 1, 0,
+    //                                            0, 0, 0, 1).finished();
+
+    // aproximately 180 degrees
+    // Eigen::Matrix4f tf = (Eigen::Matrix4f() << -0.9282, 0.3719, 0, 0.5711,
+    //                                            -0.3719, -0.9282, 0, 0.7114,
+    //                                            0, 0, 1, 0,
+    //                                            0, 0, 0, 1).finished();
+    //aproximately 180 degrees around Z, and flipped around (about 180 degrees as well)
+    // Eigen::Matrix4f tf = (Eigen::Matrix4f() << 0.9285, -0.3693, -0.0377, 0.1417,
+    //                                            -0.3706, -0.9159, -0.1546, 0.7290,
+    //                                            0.0225, 0.1575, -0.9873, 0.2249,
+    //                                            0, 0, 0, 1).finished();
+    newPcl::transformPointCloudWithNormals(pointCloud,pointCloud,tf);
+    pcl::io::savePCDFileBinary (path + "completePointCloudBadAlligned.pcd", pointCloud);
+}
 
 std::vector<int>  createPPCIndices(int PPCstartIdx,int PPCendIdx){
     std::vector<int> indices;
@@ -64,13 +92,13 @@ MyPointCloud ScanProcessingNode::processPointCloud(std::future<MyPointCloud> fut
     }
 
     #if SAVE_PARTIAL_DATA
-        pcl::io::savePCDFileASCII (dataPath + "pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", pointCloud);
+        //pcl::io::savePCDFileASCII (partialOutputDataPath + "pointCloud_original" + std::to_string(currIdxRobPose) + ".pcd", pointCloud);
     #endif
     extractUnmeasuredPoints(pointCloud);  //prepisat typ co ide do funkcie alebo spravit template
     transformPointCloudFromTCPtoRobot(robotScanPoses[currIdxRobPose], pointCloud);
-    extractTable(pointCloud);
+    extractTable(pointCloud, tableZcoord);
     #if SAVE_PARTIAL_DATA
-        pcl::io::savePCDFileASCII (dataPath + "pointCloud" + std::to_string(currIdxRobPose) + ".pcd", pointCloud);
+        //pcl::io::savePCDFileASCII (partialOutputDataPath + "pointCloud" + std::to_string(currIdxRobPose) + ".pcd", pointCloud);
     #endif
     
     std::cout << "processing point cloud" << currIdxRobPose << "done..." << std::endl;
@@ -83,9 +111,9 @@ MyPointCloud ScanProcessingNode::processPointCloud(std::future<MyPointCloud> fut
 
 void ScanProcessingNode::mainThread2Loop(){
     std::vector<std::future<MyPointCloud>> threadVec;
-    threadVec.resize(numRobPoses);
+    threadVec.resize(numRobScanPoses);
     while(1){
-        for (int i = 0; i < numRobPoses; i++){
+        for (int i = 0; i < numRobScanPoses; i++){
             auto t = std::async(std::launch::async, &ScanProcessingNode::processPointCloud, this, std::move(fut_vec_MT1_MT2[i]), i);
             threadVec.at(i) = std::move(t);	
         }
@@ -116,7 +144,10 @@ void ScanProcessingNode::mainThread2Loop(){
             return;
         }
 
-        //pcl::io::savePCDFileASCII (dataPath + "completePointCloud.pcd", *completePointCloud);
+        #if SAVE_PARTIAL_DATA
+            pcl::io::savePCDFileBinary (partialOutputDataPath + "completePointCloud.pcd", *completePointCloud);
+        #endif
+        applyBadTransf(*completePointCloud, partialOutputDataPath);
         auto t1 = std::chrono::high_resolution_clock::now();
 
         sem_MT2_MT3.acquire();
@@ -140,46 +171,43 @@ void ScanProcessingNode::mainThread2Loop(){
 }
 
 /////////////////////////////main thread 3/////////////////////////////////
-void fineRegPPCtoCAD(pcl::PointCloud<pcl::PointNormal> CADcloud, MyPointCloud::Ptr PPC){
-    //CAD cloud passed as value, in order to ensure thread safety
-    //PPC can be pased as ptr because accesing diferent elements of vector is thread safe
-    //doICP(PPC, CADcloud, 100000, 300000, 4, 1e-6, 0.003);
-    pcl::PointCloud<pcl::PointNormal>::Ptr CADcloudPtr = CADcloud.makeShared();
-    doICP(PPC, CADcloudPtr, 100000, 100000, 4, 1e-6, 0.003);
-}
-
 void ScanProcessingNode::mainThread3Loop(){
     std::vector<std::future<void>> threadVec;
-    threadVec.resize(numRobPoses);
+    threadVec.resize(numRobScanPoses);
     while(true){
         CPCindices data = fut_MT2_MT3.get();
         auto t1 = std::chrono::high_resolution_clock::now(); 
         MyPointCloud::Ptr CPC_MT3 = data.CPC.makeShared();
+        auto tShrdPtr = std::chrono::high_resolution_clock::now(); 
         resetPromFut(prom_MT2_MT3, fut_MT2_MT3); //clear memory occupied by promise asap
         if(exitFuture.wait_for(std::chrono::seconds(0)) == std::future_status::ready){
             std::cout << "exiting main thread 3" << std::endl;
             return;
-        }
-        
-        //initial allignment, supposing that inspected parts are arriving with aproximately same position
-        //newPcl::transformPointCloudWithNormals(*CPC_MT3, *CPC_MT3, initialAllign);
+        }       
 
         //coarse allignment CPC to CAD
         std::cout << "coarse allignment..." << std::endl;
-        //Eigen::Affine3f totalTransform =  alignPointClouds(CPC_MT3, CADcloud, 8000, 50000, 15, 1e-4, 0.05);
-        Eigen::Affine3f totalTransform =  alignPointClouds(CPC_MT3, CADcloud, 8000, 100000, 6, 1e-5, 0.05);
+        //without good initial guess
+        //Eigen::Affine3f totalTransform =  coarseCPCtoCAD(CPC_MT3, CADcloud, partialOutputDataPath);
+        //with good initial guess
+        Eigen::Affine3f totalTransform =  coarseCPCtoCAD(CPC_MT3, CADcloud, initialTransform, partialOutputDataPath);
         //std::cout  << totalTransform.matrix() << std::endl;
-        //pcl::io::savePCDFileASCII (dataPath + "completePointCloudCoarseAlligned.pcd", *CPC_MT3);
+        #if SAVE_PARTIAL_DATA
+            pcl::io::savePCDFileBinary (partialOutputDataPath + "completePointCloudCoarseAlligned.pcd", *CPC_MT3);
+        #endif
 
         auto tfine = std::chrono::high_resolution_clock::now(); 
 
         //fine allignment PPC to CAD
         std::cout << "fine allignment..." << std::endl;
         std::vector<MyPointCloud::Ptr> PPCvec;
-        PPCvec.reserve(numRobPoses);
-        for (int i = 0; i < numRobPoses; i++){
+        PPCvec.reserve(numRobScanPoses);
+        for (int i = 0; i < numRobScanPoses; i++){
             PPCvec.emplace_back(MyPointCloud(*CPC_MT3,createPPCIndices(data.PCPindices[i] , data.PCPindices[i+1])).makeShared());
-            auto t = std::async(std::launch::async, fineRegPPCtoCAD, *CADcloud, PPCvec.at(i));
+            //CAD cloud needs to be passed as new shared ptr to ensure thread safety, 
+            //this way each thread has its own CAD cloud heap memory allocated
+            //PPC can be pased as ptr because accesing diferent elements of vector is thread safe
+            auto t = std::async(std::launch::async, fineRegPPCtoCAD<MyPoint>, PPCvec.at(i), (*CADcloud).makeShared());
             threadVec.at(i) = std::move(t);	
         }
 
@@ -188,7 +216,7 @@ void ScanProcessingNode::mainThread3Loop(){
 
         auto tfine2 = std::chrono::high_resolution_clock::now(); 
 
-        for (int i = 0; i < numRobPoses; i++){
+        for (int i = 0; i < numRobScanPoses; i++){
             if(threadVec.at(i).wait_for(std::chrono::seconds(240)) != std::future_status::ready){
                 std::cout << "maximum time of scanning one part reached" << std::endl;
                 raise(SIGINT);
@@ -199,28 +227,23 @@ void ScanProcessingNode::mainThread3Loop(){
         
         //ICP duration
         auto t2 = std::chrono::high_resolution_clock::now();
+        auto durationShPtr = std::chrono::duration_cast<std::chrono::microseconds>(tShrdPtr - t1);
+        std::cout << "Duration shared ptr creation" << durationShPtr.count()/1000000.0 << std::endl;
         auto durationFineRegPrep= std::chrono::duration_cast<std::chrono::microseconds>(tfine2 - tfine);
         std::cout << "Duration fine registration prep" << durationFineRegPrep.count()/1000000.0 << std::endl;
         auto durationFineReg= std::chrono::duration_cast<std::chrono::microseconds>(t2 - tfine);
         std::cout << "Duration fine registration" << durationFineReg.count()/1000000.0 << std::endl;
         auto durationReg= std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1);
         std::cout << "Duration coarse and fine registration" << durationReg.count()/1000000.0 << std::endl;
-        
-        //extract distant points
-        std::cout << CPC_MT3->size() << std::endl;
-        auto tDistStart = std::chrono::high_resolution_clock::now();
-        extractDistantPoints(CADcloud, *CPC_MT3);
-        auto tDistEnd = std::chrono::high_resolution_clock::now();
-        auto durationDistances= std::chrono::duration_cast<std::chrono::microseconds>(tDistEnd - tDistStart);
-        std::cout << "Duration distances: " << durationDistances.count()/1000000.0 << std::endl;
-        std::cout << CPC_MT3->size() << std::endl;
 
         //create projections from register CPC
         quality_inspection::create2Dprojections CPCmsg;
         pcl::toROSMsg(*CPC_MT3, CPCmsg.request.pc2);
         client_srvs_create2Dprojections.call(CPCmsg);
-        std::cout << CPCmsg.response.message << std::endl;        
-        //pcl::io::savePCDFileASCII (dataPath + "completePointCloudFineAlligned.pcd", *CPC_MT3);
+        std::cout << CPCmsg.response.message << std::endl;
+        #if SAVE_PARTIAL_DATA       
+            pcl::io::savePCDFileBinary (partialOutputDataPath + "completePointCloudFineAlligned.pcd", *CPC_MT3);
+        #endif
 
         sem_MT2_MT3.release();
         std::cout << "processing in MT3 done" << std::endl;
@@ -238,46 +261,59 @@ ScanProcessingNode::ScanProcessingNode(): sem_MT2_MT3(1, 1) {
     exitFunc = boost::bind(&ScanProcessingNode::procScanExitFunc, this);
     exitFuture = exitPromise.get_future();
 
+    //get parameters from parameter server
+    if(loadRobotScanPoses() != 0){
+        return;
+    }
+    if(loadExpInitTransform() != 0){
+        return;
+    }
+    if(loadPartialoutputDataPath() != 0){
+        return;
+    }
+    if(loadCADmodel() != 0){
+        return;
+    }
+    if(loadTableZcoord() != 0){
+        return;
+    }
+
     //communication between main thread 1 and main thread 2
-    numRobPoses = robotScanPoses.size(); //this of course has to be before all references to this variable
-    fut_vec_MT1_MT2.resize(numRobPoses);
-    prom_vec_MT1_MT2.resize(numRobPoses);
-    for(int i  = 0; i < numRobPoses; i++){
+    numRobScanPoses = robotScanPoses.size(); //this of course has to be before all references to this variable
+    fut_vec_MT1_MT2.resize(numRobScanPoses);
+    prom_vec_MT1_MT2.resize(numRobScanPoses);
+    for(int i  = 0; i < numRobScanPoses; i++){
         //call here to ensure that futures are ready before data callback is processed
         resetPromFut(prom_vec_MT1_MT2.at(i), fut_vec_MT1_MT2.at(i));
     }
 
     //communication between main thread 2 and main thread 3
     resetPromFut(prom_MT2_MT3, fut_MT2_MT3);
-    
-    //create datapath and load CAD model for registration
-    createDataPath();
-    std::cout << dataPath << std::endl;
-    loadPointCloud(CADcloud, dataPath + "pointCloudCAD407Ktransformed.pcd");
 
     //initialize Main thread 2 and main thread 3
     std::thread mainThread2 (&ScanProcessingNode::mainThread2Loop, this);
     std::thread mainThread3 (&ScanProcessingNode::mainThread3Loop, this);
 
     //create subscribers to scanner data topics, which are processed in main thread 1
-    message_filters::Subscriber<sensor_msgs::PointCloud2> pointCloudSub(n, "/phoxi_camera/pointcloud", numRobPoses);
-    message_filters::Subscriber<sensor_msgs::Image> textureSub(n, "phoxi_camera/texture", numRobPoses);
-    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::Image> sync(pointCloudSub, textureSub, numRobPoses);
+    message_filters::Subscriber<sensor_msgs::PointCloud2> pointCloudSub(n, "/phoxi_camera/pointcloud", numRobScanPoses);
+    message_filters::Subscriber<sensor_msgs::Image> textureSub(n, "phoxi_camera/texture", numRobScanPoses);
+    message_filters::TimeSynchronizer<sensor_msgs::PointCloud2, sensor_msgs::Image> sync(pointCloudSub, textureSub, numRobScanPoses);
     sync.registerCallback(boost::bind(&ScanProcessingNode::combCB, this, _1, _2));
+
+    //prerobit na strukturu
+    PPCindices.resize(numRobScanPoses+1);
+    PPCindices.emplace_back(0);
 
     //synchronization between Main module and Scan Processing module
     client_srvs_main_scanProcessing = n.serviceClient<std_srvs::SetBool>("comm_main_processScan");
     client_srvs_main_scanProcessing.waitForExistence();
+
     std_srvs::SetBool empty;
     client_srvs_main_scanProcessing.call(empty);
 
     //create client to service providing creation of 2D projections
     client_srvs_create2Dprojections = n.serviceClient<quality_inspection::create2Dprojections>("/quality_inspection/create2Dprojections");
     client_srvs_create2Dprojections.waitForExistence();
-
-    //prerobit na strukturu
-    PPCindices.resize(numRobPoses+1);
-    PPCindices.emplace_back(0);
 
     ros::spin();
     mainThread2.join();
@@ -304,12 +340,94 @@ void ScanProcessingNode::procScanExitFunc(){
     catch(const std::future_error& e){}
 }
 
-void ScanProcessingNode::createDataPath(){
-    dataPath = ros::package::getPath("quality_inspection"); 
-    dataPath = dataPath.substr(0, dataPath.find_last_of("/\\"));    
-    dataPath = dataPath.substr(0, dataPath.find_last_of("/\\"));       
-    dataPath = dataPath + "/InspectionFiles/";
-    boost::filesystem::create_directories(dataPath);
+int ScanProcessingNode::loadPartialoutputDataPath(){
+    if( !n.getParam("/partial_output_data_folder", partialOutputDataPath)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    boost::filesystem::create_directories(partialOutputDataPath);
+    return 0;
+}
+
+int ScanProcessingNode::loadExpInitTransform(){
+    //get path to file containing robot scanning positions
+    std::string str1;
+    if( !n.getParam("/input_data_folder", str1)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    std::string str2;
+    if( !n.getParam("/expected_initial_tranform", str2)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    std::string path = str1 + str2;
+    
+    std::vector<std::vector<double>> transMatVec;
+    int numRowsCols = 4; //homogenous transformation matrix is 4x4
+    if(loadTxtTo2DVector(path, transMatVec, numRowsCols, numRowsCols) != 0){
+        return -1;
+    }
+    for(int row = 0; row < numRowsCols; row++){
+        for(int col = 0; col < numRowsCols; col++){
+            initialTransform(row,col) = transMatVec[row][col];
+        }
+    }
+    std::cout  << initialTransform.matrix() << std::endl;
+
+    return 0;
+}
+
+int ScanProcessingNode::loadRobotScanPoses(){
+    //get path to file containing robot scanning positions
+    std::string str1;
+    if( !n.getParam("/input_data_folder", str1)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    std::string str2;
+    if( !n.getParam("/robot_scanning_poses", str2)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    std::string path = str1 + str2;
+    int numCols = 6; // robot pose is defined as {x, y, z, A, B, C}
+    if(loadTxtTo2DVector(path, robotScanPoses, numCols, -1) != 0){
+        return -1;
+    }
+
+    return 0;
+}
+
+int ScanProcessingNode::loadCADmodel(){
+    //get path to file containing robot scanning positions
+    std::string str1;
+    if( !n.getParam("/input_data_folder", str1)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    std::string str2;
+    if( !n.getParam("/CAD_model", str2)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+    std::string path = str1 + str2;
+
+    if (pcl::io::loadPCDFile (path, *CADcloud) == -1){
+        PCL_ERROR (std::string("Couldn't read CAD model file").append(path).append("\n").c_str());
+        return -1;
+    }
+
+    return 0;
+}
+
+int ScanProcessingNode::loadTableZcoord(){
+    if( !n.getParam("/table_Z_coord",tableZcoord)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+
+    return 0;
 }
 
 template<typename T>
@@ -337,7 +455,7 @@ void sigintCB(int signum){
 
 ///////////////////////////////////main//////////////////////////////////////////
 int main(int argc, char** argv){    
-    ros::init(argc, argv, "scanProcessingNode", ros::init_options::NoSigintHandler);  
+    ros::init(argc, argv, "scan_processing", ros::init_options::NoSigintHandler);  
     std::signal(SIGINT, sigintCB); //should be after ros::init()    
     ScanProcessingNode processScan;
     

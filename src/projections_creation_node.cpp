@@ -1,18 +1,25 @@
-#include <projectionsNode.h>
+#include <projections_creation_node.h>
 
-ProjectionsNode::ProjectionsNode(){
-    create2DprojectionsServer = n.advertiseService("/quality_inspection/create2Dprojections", &ProjectionsNode::create2DprojectionsCB, this);
+ProjectionsCreationNode::ProjectionsCreationNode(){
+    create2DprojectionsServer = n.advertiseService("/quality_inspection/create2Dprojections", &ProjectionsCreationNode::create2DprojectionsCB, this);
     
-    createDataPath();
-    loadRivetPositions();
+    if(loadOutputDataPath() != 0){
+        sleep(1);
+        return;
+    }
+    
+    if(loadRivetPositions() != 0){
+        sleep(1);
+        return;
+    }
+    cloud = pcl::make_shared<MyPointCloud>();
     partID = 0;
 
     ros::spin();
 }
 
-bool ProjectionsNode::create2DprojectionsCB(quality_inspection::create2Dprojections::Request &req, quality_inspection::create2Dprojections::Response &res){
+bool ProjectionsCreationNode::create2DprojectionsCB(quality_inspection::create2Dprojections::Request &req, quality_inspection::create2Dprojections::Response &res){
     auto t1 = std::chrono::high_resolution_clock::now();
-    cloud = pcl::make_shared<MyPointCloud>();
     pcl::fromROSMsg(req.pc2, *cloud);
 
     createProjections();    
@@ -21,64 +28,72 @@ bool ProjectionsNode::create2DprojectionsCB(quality_inspection::create2Dprojecti
     std::cout << "Duration Projections: " << durationProj.count()/1000000.0 << std::endl;
 
     pcl::io::savePCDFileBinary (currScanningDataFolder() + "completePointCloudProj.pcd", *cloud);
-
+    cloud->clear();
+    partID++;
     return true;
 }
 
-void ProjectionsNode::loadRivetPositions(){
-    std::string path = ros::package::getPath("quality_inspection"); 
-    path = path.substr(0, path.find_last_of("/\\"));    
-    path = path.substr(0, path.find_last_of("/\\"));       
-    path = path + "/cadModels/2layerData/rivetPositions.txt";
-    std::ifstream file;
-    file.open(path);
-    if(!file){
-        std::cout<<"Cannot open file with rivet positions...";
-        return;
+int ProjectionsCreationNode::loadRivetPositions(){
+    //get path to file containing robot scanning positions
+    std::string str1;
+    if( !n.getParam("/input_data_folder", str1)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
     }
-    std::string line;
-    while(std::getline(file, line)){
-        rivetLocations.push_back(std::vector<float>(3, 0.0));
-        std::stringstream lineStream(line);
-        lineStream >> rivetLocations.back().at(0); //X rivet position
-        lineStream >> rivetLocations.back().at(1); //Y rivet position
-        lineStream >> rivetLocations.back().at(2); //Z rivet position
+    std::string str2;
+    if( !n.getParam("/rivet_positions", str2)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
     }
-    file.close();
-    // for(auto& pos : rivetLocations){
-    //     std::cout << pos[0] << " " << pos[1] << " " << pos[2] << std::endl;
-    // }
+    std::string path = str1 + str2;
+    int numCols = 3; //rivet positions is defined as {X,Y,Z}
+    if(loadTxtTo2DVector(path, rivetLocations, 3, -1) != 0){
+        return -1;
+    }
+
+    return 0;
 }
 
+int ProjectionsCreationNode::loadInitialPartID(){
+    int temp_partID;
+    if( !n.getParam("/initial_part_ID", temp_partID)){
+        ROS_ERROR("Failed to get parameter from server.");
+        return -1;
+    }
+
+    partID = u_int64_t(temp_partID);
+    return 0;
+}
 
 // data paths
-void ProjectionsNode::createDataPath(){
-    dataPath = ros::package::getPath("quality_inspection"); 
-    dataPath = dataPath.substr(0, dataPath.find_last_of("/\\"));    
-    dataPath = dataPath.substr(0, dataPath.find_last_of("/\\"));       
-    dataPath = dataPath + "/data_quality_inspection/";
-    boost::filesystem::create_directories(dataPath);
+int ProjectionsCreationNode::loadOutputDataPath(){
+    if( !n.getParam("/output_data_folder", outputDataPath)){
+        ROS_ERROR("Failed to get parameter from server.");        
+        return -1;
+    }
+    boost::filesystem::create_directories(outputDataPath);
+    return 0;
 }
 
-std::string ProjectionsNode::currPartFolder(){
-    std::string path = dataPath + "part_ID_" + std::to_string(partID) + "/";    
+std::string ProjectionsCreationNode::currPartFolder(){
+    std::string path = outputDataPath + "part_ID_" + std::to_string(partID) + "/";    
     boost::filesystem::create_directories(path);
     return path;
 }
 
-std::string ProjectionsNode::currRivetFolder(unsigned int rivetID){
+std::string ProjectionsCreationNode::currRivetFolder(unsigned int rivetID){
     std::string path = currPartFolder() + "rivets/" + "rivet_ID_" + std::to_string(rivetID) + "/";
     boost::filesystem::create_directories(path);
     return path;
 }
 
-std::string ProjectionsNode::currScanningDataFolder(){
+std::string ProjectionsCreationNode::currScanningDataFolder(){
     std::string path = currPartFolder() + "scanning_data/";
     boost::filesystem::create_directories(path);
     return path;
 }
 
-void ProjectionsNode::saveRivetCenterDistances(std::vector<std::future<std::array<float,2>>>& threadVec){
+void ProjectionsCreationNode::saveRivetCenterDistances(std::vector<std::future<std::array<float,2>>>& threadVec){
     std::ofstream file;
     file.open(currPartFolder() + "rivetDeviations.txt");
     if(!file){
@@ -100,15 +115,16 @@ void ProjectionsNode::saveRivetCenterDistances(std::vector<std::future<std::arra
     file.close();
 }
 
-void ProjectionsNode::createProjections(){
+void ProjectionsCreationNode::createProjections(){
     //1.64s processing for 30 rivets
     unsigned int numRivets = rivetLocations.size();
     std::vector<std::future<std::array<float,2>>> threadVec;
     threadVec.resize(numRivets);
     for(int rivetID = 0; rivetID < numRivets; rivetID++){
-        MyPointCloud rivetCloud;
-        projections.extractRivetPointCloud(cloud, rivetCloud, rivetLocations[rivetID]);
-        auto t = std::async(std::launch::async, &ProjectionsNode::adjustPCcreateProj, this, rivetCloud, projections, rivetLocations[rivetID], rivetID);
+        MyPointCloud::Ptr rivetCloud (new MyPointCloud);
+        Projections projections;
+        projections.extractRivetPointCloud(cloud, *rivetCloud, rivetLocations[rivetID]);
+        auto t = std::async(std::launch::async, &ProjectionsCreationNode::adjustPCcreateProj, this, rivetCloud, projections, rivetLocations[rivetID], rivetID);
         threadVec.at(rivetID) = std::move(t);	
     }
 
@@ -119,18 +135,16 @@ void ProjectionsNode::createProjections(){
         }
     }
     saveRivetCenterDistances(threadVec);
-
-    partID++;
 }
 
-std::array<float,2> ProjectionsNode::adjustPCcreateProj(MyPointCloud rivetCloud, Projections projections, std::vector<float> rivetLocation, int rivetID){
-    MyPointCloud::Ptr rivetCloudPtr  = rivetCloud.makeShared();
+std::array<float,2> ProjectionsCreationNode::adjustPCcreateProj(MyPointCloud::Ptr rivetCloudPtr, Projections projections, std::vector<float> rivetLocation, int rivetID){
+    //MyPointCloud::Ptr rivetCloudPtr  = rivetCloud.makeShared();
     projections.adjustRivetPointCloud(rivetCloudPtr, rivetLocation);
     std::array<float,2>  rivCenterDist = projections.create2DProjectionsImages(rivetCloudPtr, currRivetFolder(rivetID));
     return rivCenterDist;
 }
 
-// void ProjectionsNode::createProjections(){
+// void ProjectionsCreationNode::createProjections(){
 //     //4.46s processing for 30 rivets
 //     unsigned int numRivets = sizeof(rivetLocations) / sizeof(rivetLocations[0]);
 //     for(int rivetID = 0; rivetID < numRivets; rivetID++){
@@ -144,7 +158,7 @@ std::array<float,2> ProjectionsNode::adjustPCcreateProj(MyPointCloud rivetCloud,
 
 ///////////////////////////////////main//////////////////////////////////////////
 int main(int argc, char** argv){    
-    ros::init(argc, argv, "projectionsNode");   
-    ProjectionsNode projectionsNode;    
+    ros::init(argc, argv, "projections_creation");   
+    ProjectionsCreationNode projectionsNode;    
     return 0;
 }

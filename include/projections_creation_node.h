@@ -4,11 +4,12 @@
 #include <pcl_ros/point_cloud.h>
 #include <quality_inspection/create2Dprojections.h>
 #include <ros/package.h>
-#include <projections.h>
+#include <projections_creation.h>
 #include <chrono>
 #include <vector>
 #include <future>
 #include <array>
+#include <auxiliaries.h>
 
 
 typedef pcl::PointXYZINormal MyPoint;
@@ -19,34 +20,31 @@ namespace pcl{
   using boost::make_shared;
 };
 
-class ProjectionsNode{
+class ProjectionsCreationNode{
     public:
-      ProjectionsNode();
+      ProjectionsCreationNode();
 
     private:
     ros::NodeHandle n;
     ros::ServiceServer create2DprojectionsServer;
 
-    std::string dataPath;
+    std::string outputDataPath;
     MyPointCloud::Ptr cloud;
 
-    Projections projections;
+    //Projections projections;
 
-    unsigned long partID;
+    u_int64_t partID;
 
-    //x, y, z location of the center of a rivet in meters
-    // float rivetLocations [3][3] ={{0.060848f, -0.152035f, -0.036782},
-    //                               {0.063324f, 0.139139f, -0.035323f},
-    //                               {-0.065320f, 0.145271f, 0.005731f}};
     std::vector<std::vector<float>> rivetLocations;
 
-    void createDataPath();
+    int loadOutputDataPath();
     std::string currPartFolder();
     std::string currRivetFolder(unsigned int rivetID);
     std::string currScanningDataFolder();
     bool create2DprojectionsCB(quality_inspection::create2Dprojections::Request &req, quality_inspection::create2Dprojections::Response &res);
     void createProjections();
-    std::array<float,2> adjustPCcreateProj(MyPointCloud rivetCloud, Projections projections, std::vector<float> rivetLocation, int rivetID);
-    void loadRivetPositions();
+    std::array<float,2> adjustPCcreateProj(MyPointCloud::Ptr rivetCloud, Projections projections, std::vector<float> rivetLocation, int rivetID);
+    int loadRivetPositions();
+    int loadInitialPartID();
     void saveRivetCenterDistances(std::vector<std::future<std::array<float,2>>>& threadVec);
 };

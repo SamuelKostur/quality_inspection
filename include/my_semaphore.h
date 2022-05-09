@@ -18,7 +18,7 @@ public:
         std::lock_guard<decltype(mutex_)> lock(mutex_);
         count_ = std::min(maxVal, count_ + 1);
         condition_.notify_one();
-        std::cout << count_ << std::endl;
+        //std::cout << count_ << std::endl;
     }
 
     void acquire() {
@@ -28,6 +28,6 @@ public:
         }
         --count_;
         // netreba count_ = std::max((unsigned long) 0, count_ - 1); lebo while nepusti ak count nieje vacsie ako 0
-        std::cout << count_ << std::endl;
+        //std::cout << count_ << std::endl;
     }
 };

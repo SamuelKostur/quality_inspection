@@ -1,0 +1,18 @@
+input_data_folder: "/home/frixys/catkin_ws/input_data_quality_inspection/" # folder containing necessary input data
+output_data_folder: "/home/frixys/catkin_ws/output_data_quality_inspection/" # folder containing fundamental output data
+partial_output_data_folder: "/home/frixys/catkin_ws/partial_output_data_quality_inspection/" # folder for saving partial output, only used for development
+simulation_input_data_folder: "/home/frixys/catkin_ws/simulation_input_data_folder/" # folder containing input scanning data for offline mode (simulation)
+
+#names of the input files in the input_data_folder
+rivet_positions: "rivetPositions.txt" # txt file containing rivet centers positions
+robot_scanning_poses: "robotScanningPoses.txt" # txt file containing robot scanning poses
+expected_initial_tranform: "expectedInitialTransform.txt" # expected transformation to allign Complete point cloud (of the scanned scanned) to CAD model
+CAD_model: "pointCloudCAD101Ktransformed.pcd" # point cloud made from CAD model, used as reference cloud in point cloud registration
+
+robot_home_pose: [218.80, 393.40, 704.72, 113.37, 46.55, 55.06] # home position of the robot
+table_Z_coord: 0.042035 # Minimal Z coordinate in the robot base coordinate system in meters
+                        # corresponding to the inspected part and not table.
+                        # If you want to skip point cloud filtration based on this
+                        # information, just enter very low number.
+initial_part_ID: 0 # ID of the first scanned part (can only be positive number)
+simulation_robot_scanning_poses_count: 7 # number of robot scanning poses used in offline mode (simulation)

@@ -6,7 +6,7 @@
 #include <pcl/filters/crop_box.h>
 #include <pcl/filters/extract_indices.h>
 #include <pcl/segmentation/sac_segmentation.h>
-#include <newTransform.hpp>
+#include <my_transform.hpp>
 #include <pcl/features/normal_3d.h>
 #include <pcl/features/rsd.h>
 
@@ -16,6 +16,8 @@
 #include <opencv2/imgproc.hpp>
 
 #include <array>
+
+#include <opencv2/photo.hpp>
 
 namespace pcl{
   using boost::shared_ptr;
@@ -45,13 +47,13 @@ class ColorSetter{
         if(writeCheckMatrix.at(row).at(col) == 0){
           setColor(color, RColor, GColor, BColor);
         }
-        // else{
-        //   int avgBColor = calcAvgCol(writeCheckMatrix.at(row).at(col), color[0], BColor);
-        //   int avgGColor = calcAvgCol(writeCheckMatrix.at(row).at(col), color[1], GColor);
-        //   int avgRColor = calcAvgCol(writeCheckMatrix.at(row).at(col), color[2], RColor);
-        //   setColor(color, avgRColor, avgGColor, avgBColor);
-        // }
-        // writeCheckMatrix.at(row).at(col) +=1;
+        else{
+          int avgBColor = calcAvgCol(writeCheckMatrix.at(row).at(col), color[0], BColor);
+          int avgGColor = calcAvgCol(writeCheckMatrix.at(row).at(col), color[1], GColor);
+          int avgRColor = calcAvgCol(writeCheckMatrix.at(row).at(col), color[2], RColor);
+          setColor(color, avgRColor, avgGColor, avgBColor);
+        }
+        writeCheckMatrix.at(row).at(col) +=1;
       }
     }
 
@@ -172,6 +174,83 @@ class Projections{
     }
 
     template<typename T>
+    void smoothPointCloudAvgSphere(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud){
+      pcl::search::KdTree<T> kdtree;
+      float radius = 0.00035;
+      unsigned int maxNumNeighbours = 0; // If set to 0 or to a number higher than the number of points in the input cloud, all neighbors in radius will be returned. 
+      pcl::Indices neighboursIndices;
+      std::vector<float> neighbourSqrDistances;
+      kdtree.setInputCloud(rivetCloud);
+
+      pcl::PointCloud<T> avgRivetCLoud = *rivetCloud;
+      float avgDepth = 0;
+      for (int indRiv = 0; indRiv < rivetCloud->size(); indRiv++){
+          kdtree.radiusSearch(indRiv, radius, neighboursIndices, neighbourSqrDistances, maxNumNeighbours);
+          for (int indNbr = 0; indNbr < neighboursIndices.size(); indNbr++){
+            avgDepth += rivetCloud->points[neighboursIndices[indNbr]].z;
+          }
+          if(neighboursIndices.size() > 0){
+            avgDepth += rivetCloud->points[indRiv].z;
+            avgDepth /= (neighboursIndices.size() + 1);
+            avgRivetCLoud.points[indRiv].z = avgDepth;
+          }
+          avgDepth = 0;
+      }
+
+      *rivetCloud = avgRivetCLoud;
+    }
+
+    template<typename T>
+    void smoothPointCloudMedianXY(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud){
+      //set all Z coordinate values to 0 in order to execute search of closest neighbours in xy plane regardless of their Z coordinate
+      pcl::PointCloud<T> xyRivetCLoud = *rivetCloud;
+      for(int i = 0; i < rivetCloud->size(); i++){
+        xyRivetCLoud.points[i].z = 0;
+      }
+
+      pcl::search::KdTree<T> kdtree;
+      float radius = 0.00035;
+      unsigned int maxNumNeighbours = 0; // If set to 0 or to a number higher than the number of points in the input cloud, all neighbors in radius will be returned. 
+      pcl::Indices neighboursIndices;
+      std::vector<float> neighbourSqrDistances;
+      kdtree.setInputCloud(xyRivetCLoud.makeShared());
+      float switchThreshHold = 0.00015;
+      float avgDepth = 0;
+      pcl::PointCloud<T> avgRivetCLoud = *rivetCloud;
+      std::vector<float> depthVec;
+      for (int indRiv = 0; indRiv < rivetCloud->size(); indRiv++){
+          kdtree.radiusSearch(indRiv, radius, neighboursIndices, neighbourSqrDistances, maxNumNeighbours);
+          for (int indNbr = 0; indNbr < neighboursIndices.size(); indNbr++){
+            depthVec.push_back(rivetCloud->points[neighboursIndices[indNbr]].z);
+            avgDepth += rivetCloud->points[neighboursIndices[indNbr]].z;
+          }
+          if(neighboursIndices.size() > 0){
+            avgDepth /= neighboursIndices.size();
+            if(abs(avgDepth - rivetCloud->points[indRiv].z) < switchThreshHold){
+              avgDepth = (avgDepth * neighboursIndices.size() +  rivetCloud->points[indRiv].z) / (neighboursIndices.size() + 1);
+              avgRivetCLoud.points[indRiv].z = avgDepth;
+            }
+            else{
+              depthVec.push_back(rivetCloud->points[indRiv].z);
+              std::sort(depthVec.begin(),depthVec.end());
+
+              if(depthVec.size()%2){
+                avgRivetCLoud.points[indRiv].z = (depthVec[depthVec.size()/2 - 1] + depthVec[depthVec.size()/2])/2;
+              }
+              else{
+                avgRivetCLoud.points[indRiv].z = depthVec[depthVec.size()/2];
+              }
+            }  
+          }
+          depthVec.clear();
+          avgDepth = 0;
+      }
+
+      *rivetCloud = avgRivetCLoud;
+    }
+
+
+    template<typename T>
     void adjustRivetPointCloud(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud, std::vector<float> rivetLocation){
       //translate rivet point cloud so the beginning of the coordinate system will be in the rivet location
       Eigen::Affine3f translation= (Eigen::Affine3f)Eigen::Translation3f(-rivetLocation[0], -rivetLocation[1], -rivetLocation[2]);
@@ -189,26 +268,11 @@ class Projections{
       //translate cropped rivet point cloud so every point has a positive XY coordinate
       float offset = extractedAreaRadius;
       Eigen::Affine3f translationToPositiveXY= (Eigen::Affine3f)Eigen::Translation3f(+offset, +offset, -0);
-      newPcl::transformPointCloudWithNormals(*rivetCloud, *rivetCloud, translationToPositiveXY);          
+      newPcl::transformPointCloudWithNormals(*rivetCloud, *rivetCloud, translationToPositiveXY);
+
+      //smooth point cloud in Z axis
+      smoothPointCloudMedianXY(rivetCloud);  
     }
-
-    // template<typename T>
-    // void setPixelColor(pcl::PointCloud<T>& rivetCloud, int rivetCloudIdx, cv::Mat& RGBimgCV,
-    //                       int RColor,int GColor, int BColor){
-    //   int col = floor(rivetCloud.points[rivetCloudIdx].x / pixelSize);
-    //   //Reverse ordering of rows, in order to tranform from point cloud coordinate system with origin in bottom left corner
-    //   //to img coordinate szstem with origin in top left corner. X axis has same direction in both cases.
-    //   int row = imgHeight - 1 - floor(rivetCloud.points[rivetCloudIdx].y / pixelSize);
-    //   // col = std::max(std::min(col, imgWidth - 1),0);
-    //   // row = imgHeight - 1 - std::max(std::min(row, imgHeight - 1),0);
-
-    //   if((col < imgWidth)&&(col>=0) && (row < imgHeight)&&(row>=0)){
-    //     cv::Vec3b & color = RGBimgCV.at<cv::Vec3b>(row, col);
-    //     color[0] = BColor;
-    //     color[1] = GColor;
-    //     color[2] = RColor;
-    //   }
-    // }
 
     template<typename T>
     void setPixelColorFromPoint(pcl::PointCloud<T>& rivetCloud, int rivetCloudIdx, ColorSetter& colorSetter,
@@ -251,7 +315,7 @@ class Projections{
       //creates 3*width*height RGBtensor from point cloud to represent 2D projection  based on depth (Depth image)
       //this way  [0,0] in the picture is in botoom left part, x axis goes from left to right, y axis from bottom to top (exactly like whe using graphs graph), z axis is towards me (so depth is towards me)
       //problem is that because of rotation matrix to XY plane found by ransac i cant be sure whether point cloud and Z axis is not reversed
-      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(0));
+      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar(255,0,0));
 
       float avgDepthRivet = 0.0f;
       int numRivetPoints = 0;
@@ -270,8 +334,8 @@ class Projections{
       for (int idx = 0; idx < rivetCloud->size(); idx++){
         colorIntensity = (int) (((std::max(std::min((rivetCloud->points[idx].z - avgDepthRivet),depthRangeOffset),-depthRangeOffset) + depthRangeOffset) / (depthRangeOffset*2)) * 255.0);
         setPixelColorFromPoint(*rivetCloud, idx, colorSetter,
-                      0, //R color
-                      0, //G color
+                      colorIntensity, //R color
+                      colorIntensity, //G color
                       colorIntensity);//B color
       }//B clorIntensity because virtual Z axis in image plane is towards me, 
       //so closer object to me (z axis has higher value) is more blue it is and more distant object from me is, more red it is
@@ -284,7 +348,7 @@ class Projections{
       //creates 3*width*height RGBtensor from point cloud to represent 2D projection  based on depth (Depth image)
       //this way  [0,0] in the picture is in botoom left part, x axis goes from left to right, y axis from bottom to top (exactly like whe using graphs graph), z axis is towards me
       //problem is that because of rotation matrix to XY plane found by ransac i cant be sure whether point cloud and ZPointCloudConstPtr = typename PointCloud::ConstPtr axis is not reversed
-      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(0));
+      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar(255,0,0));
 
       //set all Z coordinate values to 0 in order to execute search of closest neighbours in xy plane regardless of their Z coordinate
       pcl::PointCloud<T> xyRivetCLoud = *rivetCloud;
@@ -294,29 +358,39 @@ class Projections{
       
       std::vector<float> depthDiffs(rivetCloud->size(), 0);
       pcl::search::KdTree<T> kdtree;
-      float radius = 0.0008; //0.0017
+      float radius = 0.0005;
       unsigned int maxNumNeighbours = 0; // If set to 0 or to a number higher than the number of points in the input cloud, all neighbors in radius will be returned. 
       pcl::Indices neighboursIndices;
       std::vector<float> neighbourSqrDistances;
       kdtree.setInputCloud(xyRivetCLoud.makeShared());
+
+      // pcl::PointCloud<T> avgRivetCLoud = *rivetCloud;
+      // float avgDepth = 0;
+      // for (int indRiv = 0; indRiv < rivetCloud->size(); indRiv++){
+      //     kdtree.radiusSearch(indRiv, radius, neighboursIndices, neighbourSqrDistances, maxNumNeighbours);
+      //     for (int indNbr = 0; indNbr < neighboursIndices.size(); indNbr++){
+      //       avgDepth += rivetCloud->points[neighboursIndices[indNbr]].z;
+      //     }
+      //     if(neighboursIndices.size() > 0){
+      //       avgDepth += rivetCloud->points[indRiv].z;
+      //       avgDepth /= (neighboursIndices.size() + 1);
+      //       avgRivetCLoud.points[indRiv].z = avgDepth;
+      //     }
+      // }
+
+
       for (int indRiv = 0; indRiv < rivetCloud->size(); indRiv++){
           kdtree.radiusSearch(indRiv, radius, neighboursIndices, neighbourSqrDistances, maxNumNeighbours);
           for (int indNbr = 0; indNbr < neighboursIndices.size(); indNbr++){
-            depthDiffs[indRiv] += abs(rivetCloud->points[indRiv].z - rivetCloud->points[neighboursIndices[indNbr]].z);
+            depthDiffs[indRiv] += pow(rivetCloud->points[indRiv].z - rivetCloud->points[neighboursIndices[indNbr]].z, 2);
+            //depthDiffs[indRiv] += pow(avgRivetCLoud.points[indRiv].z - avgRivetCLoud.points[neighboursIndices[indNbr]].z, 2);
           }
           if(neighboursIndices.size() > 0){
             depthDiffs[indRiv] /= neighboursIndices.size();
           }
       }
 
-      //edge detection with this cycle and even smaller radius
-      // for (int i = 0; i < depthDiffs.size(); i++){
-      //   if(depthDiffs[i] < 0.0002){
-      //     depthDiffs[i] = 0;
-      //   }
-      // }
-
-      float depthDiffRange = 0.00011;
+      float depthDiffRange = pow(0.00011, 2);
       int colorIntensity;
 
       ColorSetter colorSetter(RGBimgCV);
@@ -373,7 +447,7 @@ class Projections{
       //creates two 3*width*height RGBtensors from point cloud to represent 2D projection based on Normals and Curvature
       //this way  [0,0] in the picture is in botoom left part, x axis goes from left to right, y axis from bottom to top (exactly like whe using graphs graph), z axis is towards me
       //problem is that because of rotation matrix to XY plane found by ransac i cant be sure whether point cloud and Z axis is not reversed
-      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(255));
+      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(0));
       
       float xIdx, yIdx, xNormal, yNormal, zNormal, ang;
       float PI = 3.1416;
@@ -403,24 +477,26 @@ class Projections{
       //creates two 3*width*height RGBtensors from point cloud to represent 2D projection based on Normals and Curvature
       //this way  [0,0] in the picture is in botoom left part, x axis goes from left to right, y axis from bottom to top (exactly like whe using graphs graph), z axis is towards me
       //problem is that because of rotation matrix to XY plane found by ransac i cant be sure whether point cloud and Z axis is not reversed
-      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(255));
+      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar(255,0,0));
       
       // for(int i = 0; i < rivetCloudNormals->size(); i++){
       //   std::cout << rivetCloudNormals->points[i].curvature << std::endl;
       // }
-      float curvRelRange = 0.02; // curvature relevant range, experimentaly determined from 1 rivetCloud in such way that
+      float curvRelRange = 0.015; // curvature relevant range, experimentaly determined from 1 rivetCloud in such way that
       //c values coresponding to individual points ranged from 0 to 0.007, so i added a bit reserve)
       //Curvature is calculated c = lambda0 / (lambda0 + lamda1 + lambda2), where lambdax is eigenvalue of Covariance matrix. 
       //Covariance matrix is positive semidefinite symetrical matrix, what implies that its eigenvalues are nonnegative.
       //Since eigenvalues are nonnegative, value of c is in interval <0;1>
 
       //calculate RGBtensor based on Curvature
+      int colorIntensity;
       ColorSetter colorSetter(RGBimgCV);
       for (int idx = 0; idx < rivetCloud->size(); idx++){
+        colorIntensity = (int) std::min(255.0, (rivetCloudNormals->points[idx].curvature /curvRelRange * 255.0));
         setPixelColorFromPoint(*rivetCloud, idx, colorSetter,
-                      (int) std::min(255.0, (rivetCloudNormals->points[idx].curvature /curvRelRange * 255.0)), //R color
-                      0, //G color
-                      0);//B color
+                      colorIntensity, //R color
+                      colorIntensity, //G color
+                      colorIntensity);//B color
       }//R color intensity increases with increasing curvature, 
       //min() added in order to evoid error because its possible that some sample will have bigger curvature then defined range
 
@@ -429,7 +505,7 @@ class Projections{
     
     template<typename T>
     cv::Mat createRSD2DprojectionFromPointCLoud(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud, pcl::PointCloud<pcl::Normal>::Ptr rivetCloudNormals){
-      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(255));
+      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar(255,0,0));
 
       // RSD estimation object.
       pcl::RSDEstimation<T, pcl::Normal, pcl::PrincipalRadiiRSD> rsd;
@@ -442,7 +518,7 @@ class Projections{
       // larger than the radius used to estimate the normals.
       rsd.setRadiusSearch(0.0008);
       // Plane radius. Any radius larger than this is considered infinite (a plane).
-      rsd.setPlaneRadius(0.008);
+      rsd.setPlaneRadius(0.006);
       rsd.setSaveHistograms(false);
 
       // Object for storing the RSD descriptors for each point.
@@ -453,12 +529,14 @@ class Projections{
       // }
 
       //calculate RGBtensor based on RSD radius
+      int colorIntensity;
       ColorSetter colorSetter(RGBimgCV);
       for (int idx = 0; idx < rivetCloud->size(); idx++){
+        colorIntensity = (int) (255.0 - std::min(255.0, (descriptors->points[idx].r_min/rsd.getPlaneRadius() * 255.0)));
         setPixelColorFromPoint(*rivetCloud, idx, colorSetter,
-                      (int) (255.0 - std::min(255.0, (descriptors->points[idx].r_min/rsd.getPlaneRadius() * 255.0))), //R color
-                      0, //G color
-                      0);//B color
+                      colorIntensity, //R color
+                      colorIntensity, //G color
+                      colorIntensity);//B color
       }//R color intensity increases with increasing curvature
 
       return RGBimgCV.clone();
@@ -493,24 +571,34 @@ class Projections{
       //creates 3*width*height RGBtensor from point cloud to represent 2D projection (without further features)
       //this way  [0,0] in the picture is in botoom left part, x axis goes from left to right, y axis from bottom to top (exactly like whe using graphs graph), z axis is towards me
       //problem is that because of rotation matrix to XY plane found by ransac i cant be sure whether point cloud and Z axis is not reversed
-      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar::all(255));
+      cv::Mat RGBimgCV(imgHeight, imgWidth, CV_8UC3, cv::Scalar(255,0,0));
       
+      int colorIntensity;
       ColorSetter colorSetter(RGBimgCV);
       for (int idx = 0; idx < rivetCloud->size(); idx++){
+        int colorIntensity = rivetCloud->points[idx].intensity;
         setPixelColorFromPoint(*rivetCloud, idx, colorSetter,
-                      rivetCloud->points[idx].intensity, //R color
-                      rivetCloud->points[idx].intensity, //G color
-                      rivetCloud->points[idx].intensity);//B color
+                      colorIntensity, //R color
+                      colorIntensity, //G color
+                      colorIntensity);//B color
       }
 
       return RGBimgCV.clone();
     }
 
-    void writeFiltImg(std::string dataPath, std::string name, cv::Mat &img){
+    void writeFiltImg(std::string dataPath, std::string name, cv::Mat &img, cv::Mat & inpaintMask, bool applyMedian){
       cv::imwrite(dataPath + name + "nonFilt.bmp", img);
-      //cv::cvtColor(img, img, CV_BGR2HSV);
-      cv::medianBlur(img, img, 3);
-      //cv::cvtColor(img, img, CV_HSV2BGR);
+      int border = 1;
+      //border is necessary because cv::inpaint is bugged and doesnt work on the edges without that
+      cv::copyMakeBorder(img, img, border, border,
+               border, border, cv::BORDER_REPLICATE);
+      cv::inpaint(img, inpaintMask, img, 3, cv::INPAINT_NS);
+      img = img(cv::Rect(border, border, img.cols - border * 2, img.rows - border * 2));
+
+      if(applyMedian){
+        cv::medianBlur(img, img, 3);
+      }
+
       cv::imwrite(dataPath + name + ".bmp", img);
     }
 
@@ -519,19 +607,19 @@ class Projections{
       
       cv::cvtColor(imgBGR, imgGRAY, cv::COLOR_BGR2GRAY);
       //cv::normalize(imgGRAY, imgGRAY,0, 255, CV_MINMAX);
-      cv::GaussianBlur(imgGRAY, imgGRAY, cv::Size(3,3),0,0);
+      //cv::GaussianBlur(imgGRAY, imgGRAY, cv::Size(3,3),0,0);
       //cv::medianBlur(imgGRAY, imgGRAY, 3);
       cv::imwrite(path+"gray.bmp", imgGRAY);
       std::vector<cv::Vec3f> circles;
       
-      cv::HoughCircles(imgGRAY, circles, cv::HOUGH_GRADIENT, 0.6, 100.0,
-                       70.0, 10.0, 13, 17);
+      cv::HoughCircles(imgGRAY, circles, cv::HOUGH_GRADIENT, 1, 100.0, //1 130
+                       200, 10.0, 13, 17);
 
       if(!circles.empty()){
         cv::Vec3f circ = circles[0];
         cv::circle(imgBGR, cv::Point(circ[0], circ[1]), circ[2], 
-                  cv::Scalar(0,255,0), 0);
-        imgBGR.at<cv::Vec3b>(circ[1], circ[0]) = {0,255,0};
+                  cv::Scalar(0,0,255), 0);
+        imgBGR.at<cv::Vec3b>(circ[1], circ[0]) = {0,0,255};
         return circles[0];
       }
       else{
@@ -567,7 +655,18 @@ class Projections{
       }
 
       std::cout << str << " " << numEmptyPixels << " " << numEmptyPixelsNF << std::endl;
-    }    
+    }
+
+    cv::Mat createInpaintMask(cv::Mat& img, int emptyPixelColor){
+      cv::Mat imgR;
+      cv::extractChannel(img, imgR, 2);
+      cv::Mat mask = imgR == emptyPixelColor;
+      int border = 1;
+      cv::copyMakeBorder(mask, mask, border, border,
+          border, border, cv::BORDER_REPLICATE);
+
+      return mask.clone();
+    }
     
     template<typename T>
     std::array<float,2> create2DProjectionsImages(pcl::shared_ptr<pcl::PointCloud<T>> rivetCloud, std::string dataPath){
@@ -575,31 +674,29 @@ class Projections{
 
       cv::Mat RGBimgCV = create2DprojectionFromPointCLoud(rivetCloud);
       cv::Mat RGBimgCVnonFilt = RGBimgCV.clone();
-      writeFiltImg(dataPath, "2Dprojection", RGBimgCV);
+      cv::Mat mask = createInpaintMask(RGBimgCV, 255);
+      cv::imwrite(dataPath + "inpaintMask.bmp", mask);
+      writeFiltImg(dataPath, "2Dprojection", RGBimgCV, mask, true);
 
       cv::Mat RGBimgCVDepth = createDepth2DprojectionFromPointCLoud(rivetCloud);
       cv::Mat RGBimgCVDepthnonFilt = RGBimgCVDepth.clone();
-      writeFiltImg(dataPath, "Depth2Dprojection", RGBimgCVDepth);
-
+      writeFiltImg(dataPath, "Depth2Dprojection", RGBimgCVDepth, mask, true);
       cv::Mat RGBimgCVDepthDiff = createDepthDiff2DprojectionFromPointCLoud(rivetCloud);
-      writeFiltImg(dataPath, "DepthDiff2Dprojection", RGBimgCVDepthDiff);
+      writeFiltImg(dataPath, "DepthDiff2Dprojection", RGBimgCVDepthDiff, mask, true);
       cv::Mat RGBimgCVIntensity = createIntensity2DprojectionFromPointCLoud(rivetCloud);
-      writeFiltImg(dataPath, "Intensity2Dprojection", RGBimgCVIntensity);
+      writeFiltImg(dataPath, "Intensity2Dprojection", RGBimgCVIntensity, mask, true);
 
       pcl::PointCloud<pcl::Normal>::Ptr rivetCloudNormals = calculateNormals(rivetCloud);
-      // use existing normals instead of calculating new ones, problem is phoxi scanner doesnt return curvature
-      // pcl::PointCloud<pcl::Normal>::Ptr rivetCloudNormals (new pcl::PointCloud<pcl::Normal>);
-      // pcl::copyPointCloud(*rivetCloud, *rivetCloudNormals); 
       cv::Mat RGBimgCVNormals = createNormals2DprojectionFromPointCLoud(rivetCloud, rivetCloudNormals);
-      writeFiltImg(dataPath, "Normals2Dprojection", RGBimgCVNormals);      
+      writeFiltImg(dataPath, "Normals2Dprojection", RGBimgCVNormals, mask, true);      
       cv::Mat RGBimgCVCurvature = createCurvature2DprojectionFromPointCLoud(rivetCloud, rivetCloudNormals);
-      writeFiltImg(dataPath, "Curvature2Dprojection", RGBimgCVCurvature);
+      writeFiltImg(dataPath, "Curvature2Dprojection", RGBimgCVCurvature, mask, true);
       cv::Mat RGBimgCVRSD = createRSD2DprojectionFromPointCLoud(rivetCloud, rivetCloudNormals);
-      writeFiltImg(dataPath, "RSD2Dprojection", RGBimgCVRSD);
+      writeFiltImg(dataPath, "RSD2Dprojection", RGBimgCVRSD, mask, true);
       
       // find rivet center and determine its deviation from model
-      cv::Vec3f circle = findRivetCenter(RGBimgCVDepthnonFilt, dataPath);      
-      cv::imwrite(dataPath + "RivetCenter" + ".bmp", RGBimgCVDepthnonFilt);
+      cv::Vec3f circle = findRivetCenter(RGBimgCVDepth, dataPath);      
+      cv::imwrite(dataPath + "RivetCenter" + ".bmp", RGBimgCVDepth);
       std::array<float,2> rivCenterDist  = calcRivetCenterDeviation(circle[1], circle[0]);
 
       calcEmptyPixels(RGBimgCVnonFilt, RGBimgCV, dataPath);

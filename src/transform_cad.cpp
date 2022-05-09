@@ -4,12 +4,13 @@
 #include <pcl/common/transforms.h>
 #include <pcl/common/centroid.h>
 #include <pcl/io/pcd_io.h>
-#include <newTransform.hpp>
+#include <my_transform.hpp>
 #include <pcl/io/ply_io.h>
-
+// #include <boost/smart_ptr/shared_ptr.hpp>
 class TransformCAD{
     public:
         TransformCAD(){
+            boost::shared_ptr<int> i;
             createDataPath();
             // std::string cloudName = "pointCloudCAD407K";
             // pcl::io::loadPCDFile(dataPath + "1layerData/" + cloudName + ".pcd", CADcloud);

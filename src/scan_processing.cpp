@@ -1,4 +1,4 @@
-#include <scanProcessing.h>
+#include <scan_processing.h>
 
 void extractUnmeasuredPoints(MyPointCloud& pointCloud){
     //Unmeasured points (pixels) caused by shadows are given the default coordinates (0,0,0).
@@ -81,11 +81,10 @@ void correctNormals(MyPointCloud& pointCloud){
     }
 }
 
-void extractTable(MyPointCloud& pointCloud){
-    float tableZ = 0.042035;
+void extractTable(MyPointCloud& pointCloud, float tableZcoord){
     pcl::PointIndices::Ptr tableIdx (new pcl::PointIndices);
     for(int i = 0; i < pointCloud.size() ; i++){
-        if(pointCloud[i].z < tableZ){
+        if(pointCloud[i].z < tableZcoord){
             tableIdx->indices.push_back(i);
         }
     }

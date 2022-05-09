@@ -1,7 +1,8 @@
 <launch>
-<node pkg="quality_inspection" name="testdataPublisherInPC" type="testdataPublisherInPC" output="screen" launch-prefix="gnome-terminal --command"/>
-<node pkg="quality_inspection" name="scanProcessingNode" type="scanProcessingNode" output="screen" launch-prefix="gnome-terminal --command"/>
-<node pkg="quality_inspection" name="projectionsNode" type="projectionsNode" output="screen" launch-prefix="gnome-terminal --command"/>
+<rosparam file="$(find quality_inspection)/config/quality_inspection.yaml" />
+<node pkg="quality_inspection" name="scanning_simulation" type="scanning_simulation_node" output="screen" launch-prefix="gnome-terminal --command"/>
+<node pkg="quality_inspection" name="scan_processing" type="scan_processing_node" output="screen" />
+<node pkg="quality_inspection" name="projections_creation" type="projections_creation_node" output="screen" launch-prefix="gnome-terminal --command"/>
 </launch>
 
 <?ignore
